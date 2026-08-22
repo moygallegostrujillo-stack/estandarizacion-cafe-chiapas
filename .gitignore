@@ -10,3 +10,5 @@ dist/
 build/
 .cache/
 out/
+enhanced/
+_temp_ocr_*
