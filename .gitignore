@@ -47,3 +47,4 @@ src/generated/
 prisma/migrations/
 .env
 .env.local
+scripts/
