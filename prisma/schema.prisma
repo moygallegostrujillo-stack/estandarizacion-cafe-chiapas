@@ -1,0 +1,280 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ==================== TENENCIA ====================
+
+model Sede {
+  id              String          @id @default(cuid())
+  nombre          String
+  direccion       String?
+  telefono        String?
+  logoUrl         String?
+  activo          Boolean         @default(true)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  equipos         Equipo[]
+  turnos          Turno[]
+  checklists      Checklist[]
+  reportesDiarios ReporteDiario[]
+  config          ConfigSede?
+  areas           Area[]
+}
+
+model ConfigSede {
+  id                      String   @id @default(cuid())
+  sedeId                  String   @unique
+  idioma                  String   @default("es")
+  zonaHoraria             String   @default("America/Mexico_City")
+  moneda                  String   @default("MXN")
+  requiereFotoEvidencia   Boolean  @default(true)
+  maxMinutosVerificacion  Int      @default(60)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  sede                    Sede     @relation(fields: [sedeId], references: [id])
+}
+
+// ==================== USUARIOS ====================
+
+model Usuario {
+  id              String       @id @default(cuid())
+  email           String       @unique
+  nombre          String
+  apellido        String?
+  telefono        String?
+  avatarUrl       String?
+  passwordHash    String
+  sedeIdActiva    String?
+  activo          Boolean      @default(true)
+  ultimoAcceso    DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  membresias      EquipoMiembro[]
+  checklistsEjecutados  Checklist[]   @relation("ejecutor")
+  checklistsVerificados Checklist[]   @relation("verificador")
+  incidenciasReportadas Incidencia[]   @relation("reportador")
+  incidenciasAtendidas  Incidencia[]   @relation("atendedor")
+}
+
+model Equipo {
+  id          String   @id @default(cuid())
+  nombre      String
+  descripcion String?
+  sedeId      String
+  areaId      String?
+  activo      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  sede        Sede             @relation(fields: [sedeId], references: [id])
+  area        Area?            @relation(fields: [areaId], references: [id])
+  miembros    EquipoMiembro[]
+}
+
+model EquipoMiembro {
+  id        String      @id @default(cuid())
+  equipoId  String
+  usuarioId String
+  rol       String      // SUPER_ADMIN, GERENTE, JEFE_AREA, SUPERVISOR, STAFF, RRHH, COMPRAS
+  activo    Boolean     @default(true)
+  desde     DateTime    @default(now())
+  hasta     DateTime?
+
+  equipo    Equipo      @relation(fields: [equipoId], references: [id])
+  usuario   Usuario     @relation(fields: [usuarioId], references: [id])
+  @@unique([equipoId, usuarioId])
+}
+
+// ==================== AREAS FLEXIBLES ====================
+
+model Area {
+  id          String     @id @default(cuid())
+  codigo      String
+  nombre      String
+  icono       String?
+  descripcion String?
+  color       String?
+  orden       Int        @default(0)
+  activo      Boolean    @default(true)
+  tipo        String     @default("SISTEMA") // SISTEMA o PERSONALIZADA
+  sedeId      String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  procesos    Proceso[]
+  equipos     Equipo[]
+  sede        Sede?      @relation(fields: [sedeId], references: [id])
+  @@unique([sedeId, codigo])
+}
+
+// ==================== PROCESOS Y FICHAS ====================
+
+model Proceso {
+  id            String     @id @default(cuid())
+  codigo        String
+  nombre        String
+  descripcion   String?
+  areaId        String
+  versionActual Int        @default(1)
+  activo        Boolean    @default(true)
+  orden         Int        @default(0)
+  prioridad     String     @default("MEDIA") // CRITICO, ALTA, MEDIA, BAJA
+  frecuencia    String?    // POR_TURNO, DIARIO, SEMANAL, MENSUAL, ANUAL
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  area          Area       @relation(fields: [areaId], references: [id])
+  fichas        Ficha[]
+  @@unique([areaId, codigo])
+}
+
+model Ficha {
+  id                String          @id @default(cuid())
+  procesoId         String
+  version           Int             @default(1)
+  activo            Boolean         @default(true)
+  responsablePuesto String?
+  aprobadorPuesto   String?
+  fechaCreacion     DateTime        @default(now())
+  proximaRevision   DateTime?
+  kpis              Json?
+  riesgos           Json?
+  docsVinculados    Json?
+  historialCambios  Json?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  proceso           Proceso         @relation(fields: [procesoId], references: [id])
+  preguntas         PreguntaFicha[]
+  checklists        Checklist[]
+  versiones         FichaVersionSnapshot[]
+  incidencias       Incidencia[]
+}
+
+model FichaVersionSnapshot {
+  id        String   @id @default(cuid())
+  fichaId   String
+  version   Int
+  contenido Json
+  creadoPor String
+  createdAt DateTime @default(now())
+  ficha     Ficha    @relation(fields: [fichaId], references: [id])
+  @@unique([fichaId, version])
+}
+
+model PreguntaFicha {
+  id        String   @id @default(cuid())
+  fichaId   String
+  numero    Int
+  pregunta  String
+  respuesta String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ficha     Ficha    @relation(fields: [fichaId], references: [id])
+  @@unique([fichaId, numero])
+}
+
+// ==================== TURNOS CONFIGURABLES ====================
+
+model Turno {
+  id         String   @id @default(cuid())
+  sedeId     String
+  nombre     String
+  horaInicio String
+  horaFin    String
+  activo     Boolean  @default(true)
+  orden      Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  sede       Sede     @relation(fields: [sedeId], references: [id])
+  checklists Checklist[]
+}
+
+// ==================== CHECKLISTS ====================
+
+model Checklist {
+  id                 String   @id @default(cuid())
+  fichaId            String
+  sedeId             String
+  turnoId            String
+  fecha              DateTime @default(now())
+  estado             String   @default("PENDIENTE")
+  ejecutadoPor       String
+  supervisorId       String?
+  fechaEjecucion     DateTime?
+  fechaVerificacion  DateTime?
+  notas              String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  ficha              Ficha           @relation(fields: [fichaId], references: [id])
+  sede               Sede            @relation(fields: [sedeId], references: [id])
+  turno              Turno           @relation(fields: [turnoId], references: [id])
+  ejecutor           Usuario         @relation("ejecutor", fields: [ejecutadoPor], references: [id])
+  verificador        Usuario?        @relation("verificador", fields: [supervisorId], references: [id])
+  items              ChecklistItem[]
+  incidencias        Incidencia[]
+}
+
+model ChecklistItem {
+  id            String   @id @default(cuid())
+  checklistId   String
+  descripcion   String
+  tipo          String   @default("BOOLEAN")
+  valor         String?
+  completado    Boolean  @default(false)
+  evidenciaUrl  String?
+  nota          String?
+  orden         Int      @default(0)
+  createdAt     DateTime @default(now())
+  completadoPor String?
+
+  checklist     Checklist @relation(fields: [checklistId], references: [id])
+}
+
+// ==================== INCIDENCIAS ====================
+
+model Incidencia {
+  id              String   @id @default(cuid())
+  checklistId     String?
+  fichaId         String?
+  tipo            String   // FALTANTE, FALLA_EQUIPO, ROBO, CADUCIDAD, OTRO
+  descripcion     String
+  gravedad        String   @default("BAJA") // BAJA, MEDIA, ALTA, CRITICA
+  reportadoPor    String
+  atendidoPor     String?
+  accionTomada    String?
+  tiempoRespuesta Int?
+  cerrado         Boolean  @default(false)
+  cerradoEn       DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  checklist       Checklist?      @relation(fields: [checklistId], references: [id])
+  ficha           Ficha?          @relation(fields: [fichaId], references: [id])
+  reportador      Usuario         @relation("reportador", fields: [reportadoPor], references: [id])
+  atendedor       Usuario?        @relation("atendedor", fields: [atendidoPor], references: [id])
+}
+
+// ==================== REPORTES ====================
+
+model ReporteDiario {
+  id                 String   @id @default(cuid())
+  sedeId             String
+  fecha              DateTime
+  totalChecklists    Int      @default(0)
+  completados        Int      @default(0)
+  verificados        Int      @default(0)
+  incidencias        Int      @default(0)
+  incidenciasCriticas Int     @default(0)
+  createdAt          DateTime @default(now())
+
+  sede               Sede     @relation(fields: [sedeId], references: [id])
+  @@unique([sedeId, fecha])
+}
