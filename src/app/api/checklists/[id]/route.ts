@@ -37,7 +37,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const body = await req.json();
 
-  const updated = await withUserContext(user.id, user.rol as never, user.sedeId, async (tx) => {
+  try {
+    const updated = await withUserContext(user.id, user.rol as never, user.sedeId, async (tx) => {
     const checklist = await tx.checklist.findUnique({ where: { id }, include: { items: true } });
     if (!checklist) throw new Error("Checklist no encontrado");
 
@@ -45,10 +46,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const isExecutor = checklist.ejecutadoPor === user.id;
     const nextEstadoEarly = body.estado as string | undefined;
 
-    // Verificación (VERIFICADO/RECHAZADO) solo managers/supervisores y no auto-verificación
+    // Verificación (VERIFICADO/RECHAZADO) solo managers/supervisores
+    // Demo: SUPER_ADMIN puede auto-verificar para probar flujo con un solo usuario; resto no
     if (nextEstadoEarly === "VERIFICADO" || nextEstadoEarly === "RECHAZADO") {
       if (!isManager) throw new Error("Solo SUPERVISOR o superior puede verificar");
-      if (isExecutor) throw new Error("No puedes verificar tu propio checklist");
+      if (isExecutor && user.rol !== "SUPER_ADMIN") throw new Error("No puedes verificar tu propio checklist — entra como supervisor@cafe.com");
       if (checklist.estado !== "COMPLETADO") throw new Error("Solo checklists COMPLETADO pueden verificarse");
     } else {
       // Edición normal solo ejecutor o manager
@@ -116,7 +118,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       data: data as never,
       include: { items: { include: { evidencias: true } }, ficha: { include: { proceso: true } } },
     });
-  });
-
-  return NextResponse.json(updated);
+    });
+    return NextResponse.json(updated);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Error actualizando checklist";
+    return NextResponse.json({ error: msg }, { status: 400 });
+  }
 }

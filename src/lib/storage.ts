@@ -31,12 +31,7 @@ const JPEG_QUALITY = 75;
  * Redimensiona a máximo 1280×960 y comprime a JPEG calidad 75.
  * Resultado: ~150-200 KB por foto.
  */
-const ALLOWED_INPUT_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif", "image/heic", "image/heif"];
-
 export async function compressImage(buffer: Buffer, originalType?: string): Promise<Buffer> {
-  if (originalType && !ALLOWED_INPUT_TYPES.includes(originalType.toLowerCase())) {
-    throw new Error(`Formato no soportado (${originalType}). Usa JPG, PNG o WebP.`);
-  }
   try {
     return await sharp(buffer, { failOn: "none" })
       .resize(MAX_WIDTH, MAX_HEIGHT, {
@@ -47,8 +42,11 @@ export async function compressImage(buffer: Buffer, originalType?: string): Prom
       .toBuffer();
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    if (msg.includes("avif") || msg.includes("heif") || msg.includes("unsupported")) {
-      throw new Error("Formato AVIF/HEIC no soportado en este servidor. Convierte a JPG/PNG antes de subir (usa la cámara en modo JPG).");
+    if (originalType?.toLowerCase().includes("heic") || originalType?.toLowerCase().includes("heif") || msg.toLowerCase().includes("heif") || msg.toLowerCase().includes("heic")) {
+      throw new Error("Foto iPhone HEIC: cambia tu iPhone a JPG (Ajustes → Cámara → Formatos → Más compatible) o convierte a JPG antes de subir. Android JPG/PNG funciona sin problema.");
+    }
+    if (msg.toLowerCase().includes("avif")) {
+      throw new Error("Formato AVIF no soportado. Usa JPG/PNG.");
     }
     throw new Error(`Error comprimiendo imagen: ${msg}`);
   }
