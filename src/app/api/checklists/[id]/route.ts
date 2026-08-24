@@ -40,8 +40,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const updated = await withUserContext(user.id, user.rol as never, user.sedeId, async (tx) => {
     const checklist = await tx.checklist.findUnique({ where: { id }, include: { items: true } });
     if (!checklist) throw new Error("Checklist no encontrado");
-    if (checklist.ejecutadoPor !== user.id && !["SUPER_ADMIN", "GERENTE", "JEFE_AREA"].includes(user.rol)) {
-      throw new Error("Solo el ejecutor o un manager puede editar");
+
+    const isManager = ["SUPER_ADMIN", "GERENTE", "JEFE_AREA", "SUPERVISOR"].includes(user.rol);
+    const isExecutor = checklist.ejecutadoPor === user.id;
+    const nextEstadoEarly = body.estado as string | undefined;
+
+    // Verificación (VERIFICADO/RECHAZADO) solo managers/supervisores y no auto-verificación
+    if (nextEstadoEarly === "VERIFICADO" || nextEstadoEarly === "RECHAZADO") {
+      if (!isManager) throw new Error("Solo SUPERVISOR o superior puede verificar");
+      if (isExecutor) throw new Error("No puedes verificar tu propio checklist");
+      if (checklist.estado !== "COMPLETADO") throw new Error("Solo checklists COMPLETADO pueden verificarse");
+    } else {
+      // Edición normal solo ejecutor o manager
+      if (!isExecutor && !isManager) {
+        throw new Error("Solo el ejecutor o un manager puede editar");
+      }
     }
 
     // Actualizar items si vienen
@@ -85,6 +98,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       if (nextEstado === "VERIFICADO") {
         data.fechaVerificacion = new Date();
         data.supervisorId = user.id;
+      }
+      if (nextEstado === "RECHAZADO") {
+        data.fechaVerificacion = new Date();
+        data.supervisorId = user.id;
+        if (typeof body.motivo === "string" && body.motivo.trim()) data.notas = `RECHAZADO: ${body.motivo}`;
       }
     }
     if (typeof body.notas === "string") data.notas = body.notas;

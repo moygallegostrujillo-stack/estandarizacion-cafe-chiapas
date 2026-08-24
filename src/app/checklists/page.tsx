@@ -18,7 +18,9 @@ type TurnoOpt = { id: string; nombre: string };
 
 export default function ChecklistsPage() {
   const { data: session } = useSession();
-  const user = session?.user as unknown as { id: string } | null;
+  const user = session?.user as unknown as { id: string; rol: string } | null;
+  const rol = (user as unknown as { rol: string } | null)?.rol || "STAFF";
+  const esSupervisor = ["SUPER_ADMIN", "GERENTE", "JEFE_AREA", "SUPERVISOR"].includes(rol);
   const [checklists, setChecklists] = useState<Checklist[]>([]);
   const [areas, setAreas] = useState<AreaOpt[]>([]);
   const [turnos, setTurnos] = useState<TurnoOpt[]>([]);
@@ -88,6 +90,26 @@ export default function ChecklistsPage() {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ estado: "COMPLETADO" }),
+    });
+    if (!res.ok) alert((await res.json()).error || (await res.text()));
+    else {
+      const data = await res.json();
+      setSelected(data);
+      loadChecklists();
+    }
+  }
+
+  async function verificar(estado: "VERIFICADO" | "RECHAZADO") {
+    if (!selected) return;
+    let motivo: string | undefined;
+    if (estado === "RECHAZADO") {
+      motivo = prompt("Motivo del rechazo:") || "";
+      if (!motivo.trim()) return;
+    }
+    const res = await fetch(`/api/checklists/${selected.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ estado, motivo }),
     });
     if (!res.ok) alert((await res.json()).error || (await res.text()));
     else {
@@ -191,10 +213,27 @@ export default function ChecklistsPage() {
                 ))}
               </div>
 
-              <button onClick={completar} disabled={selected.estado === "COMPLETADO"} className="w-full bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white font-semibold py-3 rounded-lg">
-                {selected.estado === "COMPLETADO" ? "✓ Completado" : "Marcar como completado"}
-              </button>
-              <p className="text-xs text-zinc-500 text-center">Validación: todos los items completados y fotos requeridas presentes (trigger DB limita a 7 items).</p>
+              {selected.estado === "PENDIENTE" || selected.estado === "EN_PROGRESO" ? (
+                <>
+                  <button onClick={completar} className="w-full bg-green-600 hover:bg-green-500 text-white font-semibold py-3 rounded-lg">
+                    Marcar como completado
+                  </button>
+                  <p className="text-xs text-zinc-500 text-center">Validación: todos los items completados y fotos requeridas presentes (trigger DB limita a 7 items).</p>
+                </>
+              ) : selected.estado === "COMPLETADO" ? (
+                esSupervisor ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    <button onClick={() => verificar("VERIFICADO")} className="bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 rounded-lg">✓ Aprobar</button>
+                    <button onClick={() => verificar("RECHAZADO")} className="bg-red-600 hover:bg-red-500 text-white font-semibold py-3 rounded-lg">✕ Rechazar</button>
+                  </div>
+                ) : (
+                  <div className="bg-amber-900/30 border border-amber-800 text-amber-300 text-sm px-4 py-3 rounded-lg text-center">Esperando verificación de supervisor</div>
+                )
+              ) : (
+                <div className={`text-center text-sm px-4 py-3 rounded-lg border ${selected.estado === "VERIFICADO" ? "bg-green-900/30 border-green-800 text-green-300" : "bg-red-900/30 border-red-800 text-red-300"}`}>
+                  {selected.estado === "VERIFICADO" ? "✓ Verificado por supervisor" : "✕ Rechazado — ver notas"}
+                </div>
+              )}
             </div>
           )}
         </div>
