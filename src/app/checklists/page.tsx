@@ -3,6 +3,7 @@
 import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 import BotonRojoIncidencia from "@/components/BotonRojoIncidencia";
+import IncidenciasBadge from "@/components/IncidenciasBadge";
 
 type Checklist = {
   id: string;
@@ -166,7 +167,10 @@ export default function ChecklistsPage() {
     <div className="min-h-screen bg-zinc-950 text-white">
       <header className="border-b border-zinc-800 px-6 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <h1 className="text-xl font-bold text-amber-400">Checklists</h1>
+          <div className="flex items-center gap-6">
+            <h1 className="text-xl font-bold text-amber-400">Checklists</h1>
+            <IncidenciasBadge />
+          </div>
           <a href="/inicio" className="text-sm text-zinc-400 hover:text-white">← Inicio</a>
         </div>
       </header>

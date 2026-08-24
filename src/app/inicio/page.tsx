@@ -2,6 +2,7 @@
 
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import IncidenciasBadge from "@/components/IncidenciasBadge";
 
 export default function InicioPage() {
   const { data: session } = useSession();
@@ -26,6 +27,7 @@ export default function InicioPage() {
                 <a href="/procesos" className="text-zinc-400 hover:text-white transition">Procesos</a>
               )}
               <a href="/checklists" className="text-zinc-400 hover:text-white transition">Checklists</a>
+              <IncidenciasBadge />
               {esAdmin && (
                 <a href="/reportes" className="text-zinc-400 hover:text-white transition">Reportes</a>
               )}

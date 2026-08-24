@@ -3,6 +3,7 @@
 import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 import BotonRojoIncidencia from "@/components/BotonRojoIncidencia";
+import IncidenciasBadge from "@/components/IncidenciasBadge";
 
 type Incidencia = {
   id: string;
