@@ -26,6 +26,11 @@ export async function POST(req: Request) {
 
   const buffer = Buffer.from(await file.arrayBuffer());
 
+  // AVIF/HEIC suele fallar en sharp sin libvips completo — lo rechazamos con mensaje claro
+  if (file.type === "image/avif" || file.type === "image/heic" || file.type === "image/heif") {
+    return NextResponse.json({ error: "Formato AVIF/HEIC no soportado. Usa JPG o PNG (cambia la cámara a JPG en ajustes)." }, { status: 400 });
+  }
+
   try {
     const result = await withUserContext(user.id, user.rol as never, user.sedeId, async (tx) => {
       // Validar item pertenece a checklist de la sede y obtener checklist
@@ -36,7 +41,7 @@ export async function POST(req: Request) {
       if (!item) throw new Error("Item no encontrado");
 
       // Subir a Storage (sharp comprime a ~200KB)
-      const upload = await uploadEvidencia(buffer, checklistItemId, user.id);
+      const upload = await uploadEvidencia(buffer, checklistItemId, user.id, file.type);
 
       // Registrar en DB
       const evidencia = await tx.evidencia.create({

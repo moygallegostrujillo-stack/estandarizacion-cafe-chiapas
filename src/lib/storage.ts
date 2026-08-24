@@ -31,14 +31,27 @@ const JPEG_QUALITY = 75;
  * Redimensiona a máximo 1280×960 y comprime a JPEG calidad 75.
  * Resultado: ~150-200 KB por foto.
  */
-export async function compressImage(buffer: Buffer): Promise<Buffer> {
-  return sharp(buffer)
-    .resize(MAX_WIDTH, MAX_HEIGHT, {
-      fit: "inside",
-      withoutEnlargement: true,
-    })
-    .jpeg({ quality: JPEG_QUALITY, progressive: true })
-    .toBuffer();
+const ALLOWED_INPUT_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif", "image/heic", "image/heif"];
+
+export async function compressImage(buffer: Buffer, originalType?: string): Promise<Buffer> {
+  if (originalType && !ALLOWED_INPUT_TYPES.includes(originalType.toLowerCase())) {
+    throw new Error(`Formato no soportado (${originalType}). Usa JPG, PNG o WebP.`);
+  }
+  try {
+    return await sharp(buffer, { failOn: "none" })
+      .resize(MAX_WIDTH, MAX_HEIGHT, {
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .jpeg({ quality: JPEG_QUALITY, progressive: true, mozjpeg: true })
+      .toBuffer();
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes("avif") || msg.includes("heif") || msg.includes("unsupported")) {
+      throw new Error("Formato AVIF/HEIC no soportado en este servidor. Convierte a JPG/PNG antes de subir (usa la cámara en modo JPG).");
+    }
+    throw new Error(`Error comprimiendo imagen: ${msg}`);
+  }
 }
 
 /**
@@ -53,14 +66,15 @@ export async function compressImage(buffer: Buffer): Promise<Buffer> {
 export async function uploadEvidencia(
   file: Buffer,
   checklistItemId: string,
-  subidoPor: string
+  subidoPor: string,
+  originalType?: string
 ): Promise<{
   url: string;
   thumbnailUrl: string | null;
   size: number;
 }> {
   // 1. Comprimir imagen
-  const compressed = await compressImage(file);
+  const compressed = await compressImage(file, originalType);
   const size = compressed.length;
 
   // Verificar tamaño (no debe exceder 500 KB después de compresión)

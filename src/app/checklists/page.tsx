@@ -294,7 +294,7 @@ export default function ChecklistsPage() {
                       <div className="mt-3">
                         <label className="text-xs bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 px-3 py-1.5 rounded-lg cursor-pointer inline-block">
                           📷 Subir foto
-                          <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) subirFoto(it.id, f); }} />
+                          <input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) subirFoto(it.id, f); }} />
                         </label>
                       </div>
                     )}
