@@ -10,13 +10,14 @@
 import { createClient } from "@supabase/supabase-js";
 import sharp from "sharp";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-// Cliente con service_role (solo servidor, nunca frontend)
-const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: { persistSession: false },
-});
+function getSupabase() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+  if (!supabaseUrl || !supabaseServiceKey) throw new Error("Supabase env vars faltantes");
+  return createClient(supabaseUrl, supabaseServiceKey, {
+    auth: { persistSession: false },
+  });
+}
 
 const BUCKET_NAME = "evidencias";
 
@@ -74,7 +75,7 @@ export async function uploadEvidencia(
   const fileName = `${checklistItemId}/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
 
   // 3. Subir a Supabase Storage
-  const { error: uploadError } = await supabase.storage
+  const { error: uploadError } = await getSupabase().storage
     .from(BUCKET_NAME)
     .upload(fileName, compressed, {
       contentType: "image/jpeg",
@@ -86,7 +87,7 @@ export async function uploadEvidencia(
   }
 
   // 4. Generar URL firmada (válida 1 hora por defecto, ajustable)
-  const { data: urlData } = await supabase.storage
+  const { data: urlData } = await getSupabase().storage
     .from(BUCKET_NAME)
     .createSignedUrl(fileName, 3600);
 
@@ -109,7 +110,7 @@ export async function getSignedUrl(
   path: string,
   expiresIn: number = 3600
 ): Promise<string> {
-  const { data, error } = await supabase.storage
+  const { data, error } = await getSupabase().storage
     .from(BUCKET_NAME)
     .createSignedUrl(path, expiresIn);
 
@@ -125,7 +126,7 @@ export async function getSignedUrl(
  * Se llama cuando se elimina un ChecklistItem o se reemplaza la foto.
  */
 export async function deleteEvidencia(path: string): Promise<void> {
-  const { error } = await supabase.storage
+  const { error } = await getSupabase().storage
     .from(BUCKET_NAME)
     .remove([path]);
 
