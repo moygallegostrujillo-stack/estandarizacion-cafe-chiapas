@@ -27,7 +27,7 @@ export default function ChecklistsPage() {
   const user = session?.user as unknown as { id: string; rol: string } | null;
   const rol = (user as unknown as { rol: string } | null)?.rol || "STAFF";
   const esSupervisor = ["SUPER_ADMIN", "GERENTE", "JEFE_AREA", "SUPERVISOR"].includes(rol);
-  const puedeEditarDemo = ["SUPER_ADMIN", "GERENTE", "JEFE_AREA"].includes(rol);
+  const puedeEditarDemo = ["SUPER_ADMIN", "GERENTE", "JEFE_AREA", "SUPERVISOR", "STAFF"].includes(rol);
 
   const [checklists, setChecklists] = useState<Checklist[]>([]);
   const [areas, setAreas] = useState<AreaOpt[]>([]);
