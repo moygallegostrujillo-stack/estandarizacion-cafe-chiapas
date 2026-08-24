@@ -38,6 +38,7 @@ export default function ChecklistsPage() {
   const [selected, setSelected] = useState<Checklist | null>(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   async function loadChecklists() {
     const res = await fetch("/api/checklists");
@@ -115,13 +116,23 @@ export default function ChecklistsPage() {
 
   async function completar() {
     if (!selected) return;
+    setErrorMsg(null);
+    // Validación local antes de llamar API: muestra por qué no deja completar
+    const faltaFoto = selected.items.filter((it) => it.evidenciaRequerida && it.completado && it.evidencias.length === 0);
+    if (faltaFoto.length > 0) {
+      setErrorMsg(`Falta foto en: ${faltaFoto.map((f) => f.descripcion.slice(0, 35)).join(", ")} — sube foto con 📷`);
+      return;
+    }
     const res = await fetch(`/api/checklists/${selected.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ estado: "COMPLETADO" }),
     });
-    if (!res.ok) alert((await res.json()).error || (await res.text()));
-    else {
+    if (!res.ok) {
+      let data: { error?: string } = {};
+      try { data = await res.json(); } catch { data = { error: "Error al completar" }; }
+      setErrorMsg(data.error || "Error al completar");
+    } else {
       const data = await res.json();
       setSelected(data);
       loadChecklists();
@@ -293,8 +304,24 @@ export default function ChecklistsPage() {
 
               {selected.estado === "PENDIENTE" || selected.estado === "EN_PROGRESO" ? (
                 <>
-                  <button onClick={completar} className="w-full bg-green-600 hover:bg-green-500 text-white font-semibold py-3 rounded-lg">Marcar como completado</button>
-                  <p className="text-xs text-zinc-500 text-center">Demo flexible: {selected.items.length} items (5-7). Validación: todos completados + fotos requeridas.</p>
+                  {(() => {
+                    const faltaFoto = selected.items.filter((it) => it.evidenciaRequerida && it.completado && it.evidencias.length === 0);
+                    const todosCompletados = selected.items.every((it) => it.completado);
+                    const bloqueado = faltaFoto.length > 0 || !todosCompletados;
+                    return (
+                      <>
+                        <button
+                          onClick={completar}
+                          disabled={bloqueado}
+                          className={`w-full font-semibold py-3 rounded-lg transition ${bloqueado ? "bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700" : "bg-green-600 hover:bg-green-500 text-white"}`}
+                        >
+                          {bloqueado ? (faltaFoto.length > 0 ? `Falta foto (${faltaFoto.length})` : "Marca todos los items") : "Marcar como completado ✓"}
+                        </button>
+                        {errorMsg && <div className="bg-red-900/40 border border-red-800 text-red-300 text-sm px-4 py-2 rounded-lg">{errorMsg}</div>}
+                        <p className="text-xs text-zinc-500 text-center">Demo flexible: {selected.items.length} items (5-7). Validación: todos completados + fotos requeridas.</p>
+                      </>
+                    );
+                  })()}
                 </>
               ) : selected.estado === "COMPLETADO" ? (
                 esSupervisor ? (
