@@ -183,32 +183,44 @@ export default function ChecklistsPage() {
               {/* Editor flexible demo 5-7 */}
               {fichaId && (
                 <div className="space-y-2 border-t border-zinc-800 pt-3">
-                  <p className="text-xs text-zinc-400">Preguntas editables ({draftItems.length}/7) — {puedeEditarDemo ? "gerentes pueden modificar" : "STAFF usa 7 fijas"}</p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-zinc-400">✏️ Preguntas editables ({draftItems.length}/7)</p>
+                    {puedeEditarDemo && <span className="text-xs px-2 py-0.5 bg-amber-900/30 border border-amber-800 text-amber-300 rounded-full">Demo flexible</span>}
+                  </div>
+                  {!puedeEditarDemo && <p className="text-xs text-zinc-500">STAFF usa las 7 preguntas fijas de la ficha</p>}
                   {draftItems.map((it, idx) => (
-                    <div key={idx} className="bg-zinc-800/60 rounded-lg p-2 space-y-2">
-                      <textarea
-                        value={it.descripcion}
-                        onChange={(e) => setDraftItems((prev) => prev.map((p, i) => (i === idx ? { ...p, descripcion: e.target.value } : p)))}
-                        placeholder={`Pregunta ${idx + 1}`}
-                        rows={2}
-                        disabled={!puedeEditarDemo}
-                        className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-sm disabled:opacity-60"
-                      />
-                      <div className="flex items-center justify-between">
-                        <label className="flex items-center gap-1 text-xs">
-                          <input type="checkbox" checked={it.evidenciaRequerida} onChange={(e) => setDraftItems((prev) => prev.map((p, i) => (i === idx ? { ...p, evidenciaRequerida: e.target.checked } : p)))} disabled={!puedeEditarDemo} />
-                          Foto
-                        </label>
+                    <div key={idx} className="bg-zinc-800/60 rounded-lg p-2 space-y-2 border border-transparent hover:border-zinc-700 transition">
+                      <div className="flex items-start gap-2">
+                        <span className="text-xs text-zinc-500 mt-2 w-4">{idx + 1}.</span>
+                        <textarea
+                          value={it.descripcion}
+                          onChange={(e) => setDraftItems((prev) => prev.map((p, i) => (i === idx ? { ...p, descripcion: e.target.value } : p)))}
+                          placeholder={`✏️ Escribe la pregunta ${idx + 1}... (ej. ¿Temperatura del refri?)`}
+                          rows={2}
+                          disabled={!puedeEditarDemo}
+                          className="flex-1 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-sm disabled:opacity-60 focus:border-amber-600 focus:outline-none"
+                        />
                         {puedeEditarDemo && (
-                          <button onClick={() => setDraftItems((prev) => prev.filter((_, i) => i !== idx))} className="text-xs text-red-400 hover:text-red-300">Borrar</button>
+                          <button onClick={() => setDraftItems((prev) => prev.filter((_, i) => i !== idx))} title="Borrar esta pregunta" className="mt-1 p-1.5 bg-zinc-900 hover:bg-red-900/50 border border-zinc-700 hover:border-red-700 rounded text-zinc-400 hover:text-red-300">
+                            🗑️
+                          </button>
                         )}
+                      </div>
+                      <div className="flex items-center justify-between pl-6">
+                        <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                          <input type="checkbox" checked={it.evidenciaRequerida} onChange={(e) => setDraftItems((prev) => prev.map((p, i) => (i === idx ? { ...p, evidenciaRequerida: e.target.checked } : p)))} disabled={!puedeEditarDemo} className="accent-amber-600" />
+                          📷 Foto obligatoria
+                        </label>
+                        {puedeEditarDemo && <span className="text-xs text-zinc-500">✏️ editable</span>}
                       </div>
                     </div>
                   ))}
                   {puedeEditarDemo && draftItems.length < 7 && (
                     <button onClick={() => setDraftItems((prev) => [...prev, { descripcion: "", evidenciaRequerida: false, tipo: "BOOLEAN" }])} className="w-full text-xs bg-zinc-800 hover:bg-zinc-700 border border-dashed border-zinc-600 rounded-lg py-2">+ Añadir pregunta ({draftItems.length}/7)</button>
                   )}
+                  {puedeEditarDemo && draftItems.length >= 5 && draftItems.length <= 7 && <p className="text-xs text-green-400 text-center">✓ {draftItems.length} preguntas — listo para demo (5-7)</p>}
                   {draftItems.length === 7 && <p className="text-xs text-amber-400 text-center">Máximo 7 alcanzado (trigger DB)</p>}
+                  <p className="text-xs text-zinc-500 text-center">💡 Borra con 🗑️ la pregunta que no aplique y escribe la tuya con ✏️</p>
                 </div>
               )}
 
