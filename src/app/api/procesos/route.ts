@@ -1,14 +1,10 @@
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@/generated/prisma/client";
+import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
-const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
-const prisma = new PrismaClient({ adapter });
-
 export async function GET() {
   const session = await auth();
-  const user = session?.user as any;
+  const user = session?.user as unknown as { sedeId: string | null };
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
   const areas = await prisma.area.findMany({

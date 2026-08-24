@@ -6,11 +6,11 @@ import { useRouter } from "next/navigation";
 export default function InicioPage() {
   const { data: session } = useSession();
   const router = useRouter();
-  const user = session?.user as any;
+  const user = session?.user as unknown as { name?: string; rol: string };
 
   if (!user) return null;
 
-  const rol = user.rol || "STAFF";
+  const rol = (user as unknown as { rol: string }).rol || "STAFF";
   const esAdmin = rol === "SUPER_ADMIN" || rol === "GERENTE" || rol === "JEFE_AREA";
 
   return (

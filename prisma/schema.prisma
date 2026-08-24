@@ -1,13 +1,22 @@
+// ============================================================
+// SCHEMA PRISMA v2.1 — Café DeChiapas Estandarización
+// ============================================================
+// Sincronizado con el script SQL 00_setup_completo.sql
+// Genera el cliente con: npx prisma generate
+// ============================================================
+
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider  = "postgresql"
 }
 
-// ==================== TENENCIA ====================
+// ============================================================
+// TENENCIA — Multi-sede
+// ============================================================
 
 model Sede {
   id              String          @id @default(cuid())
@@ -25,6 +34,9 @@ model Sede {
   reportesDiarios ReporteDiario[]
   config          ConfigSede?
   areas           Area[]
+  usuarios        Usuario[]
+
+  @@index([activo])
 }
 
 model ConfigSede {
@@ -37,10 +49,13 @@ model ConfigSede {
   maxMinutosVerificacion  Int      @default(60)
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
-  sede                    Sede     @relation(fields: [sedeId], references: [id])
+
+  sede                    Sede     @relation(fields: [sedeId], references: [id], onDelete: Cascade)
 }
 
-// ==================== USUARIOS ====================
+// ============================================================
+// USUARIOS — Rol único global (v2.1)
+// ============================================================
 
 model Usuario {
   id              String       @id @default(cuid())
@@ -50,17 +65,28 @@ model Usuario {
   telefono        String?
   avatarUrl       String?
   passwordHash    String
+  rol             String       @default("STAFF") // SUPER_ADMIN, GERENTE, JEFE_AREA, SUPERVISOR, STAFF, RRHH, COMPRAS
   sedeIdActiva    String?
   activo          Boolean      @default(true)
   ultimoAcceso    DateTime?
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
-  membresias      EquipoMiembro[]
-  checklistsEjecutados  Checklist[]   @relation("ejecutor")
-  checklistsVerificados Checklist[]   @relation("verificador")
-  incidenciasReportadas Incidencia[]   @relation("reportador")
-  incidenciasAtendidas  Incidencia[]   @relation("atendedor")
+  sede                    Sede?           @relation(fields: [sedeIdActiva], references: [id])
+  membresias              EquipoMiembro[]
+  checklistsEjecutados    Checklist[]     @relation("ejecutor")
+  checklistsVerificados   Checklist[]     @relation("verificador")
+  itemsCompletados        ChecklistItem[] @relation("itemCompletado")
+  incidenciasReportadas   Incidencia[]    @relation("reportador")
+  incidenciasAtendidas    Incidencia[]    @relation("atendedor")
+  evidenciasSubidas       Evidencia[]
+  auditLogs               AuditLog[]
+  sessions                Session[]
+
+  @@index([sedeIdActiva])
+  @@index([rol])
+  @@index([activo])
+  @@index([ultimoAcceso])
 }
 
 model Equipo {
@@ -71,27 +97,37 @@ model Equipo {
   areaId      String?
   activo      Boolean  @default(true)
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  sede        Sede             @relation(fields: [sedeId], references: [id])
-  area        Area?            @relation(fields: [areaId], references: [id])
+  sede        Sede             @relation(fields: [sedeId], references: [id], onDelete: Cascade)
+  area        Area?            @relation(fields: [areaId], references: [id], onDelete: SetNull)
   miembros    EquipoMiembro[]
+
+  @@index([sedeId])
+  @@index([areaId])
+  @@index([activo])
 }
 
 model EquipoMiembro {
   id        String      @id @default(cuid())
   equipoId  String
   usuarioId String
-  rol       String      // SUPER_ADMIN, GERENTE, JEFE_AREA, SUPERVISOR, STAFF, RRHH, COMPRAS
   activo    Boolean     @default(true)
   desde     DateTime    @default(now())
   hasta     DateTime?
 
-  equipo    Equipo      @relation(fields: [equipoId], references: [id])
-  usuario   Usuario     @relation(fields: [usuarioId], references: [id])
+  equipo    Equipo      @relation(fields: [equipoId], references: [id], onDelete: Cascade)
+  usuario   Usuario     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
   @@unique([equipoId, usuarioId])
+  @@index([equipoId])
+  @@index([usuarioId])
+  @@index([activo])
 }
 
-// ==================== AREAS FLEXIBLES ====================
+// ============================================================
+// ÁREAS FLEXIBLES
+// ============================================================
 
 model Area {
   id          String     @id @default(cuid())
@@ -102,18 +138,24 @@ model Area {
   color       String?
   orden       Int        @default(0)
   activo      Boolean    @default(true)
-  tipo        String     @default("SISTEMA") // SISTEMA o PERSONALIZADA
+  tipo        String     @default("SISTEMA") // SISTEMA, PERSONALIZADA
   sedeId      String?
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
   procesos    Proceso[]
   equipos     Equipo[]
-  sede        Sede?      @relation(fields: [sedeId], references: [id])
+  sede        Sede?      @relation(fields: [sedeId], references: [id], onDelete: Cascade)
+
   @@unique([sedeId, codigo])
+  @@index([sedeId])
+  @@index([activo])
+  @@index([orden])
 }
 
-// ==================== PROCESOS Y FICHAS ====================
+// ============================================================
+// PROCESOS Y FICHAS
+// ============================================================
 
 model Proceso {
   id            String     @id @default(cuid())
@@ -129,9 +171,14 @@ model Proceso {
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
-  area          Area       @relation(fields: [areaId], references: [id])
+  area          Area       @relation(fields: [areaId], references: [id], onDelete: Cascade)
   fichas        Ficha[]
+
   @@unique([areaId, codigo])
+  @@index([areaId])
+  @@index([activo])
+  @@index([orden])
+  @@index([prioridad])
 }
 
 model Ficha {
@@ -143,18 +190,21 @@ model Ficha {
   aprobadorPuesto   String?
   fechaCreacion     DateTime        @default(now())
   proximaRevision   DateTime?
-  kpis              Json?
-  riesgos           Json?
-  docsVinculados    Json?
-  historialCambios  Json?
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 
-  proceso           Proceso         @relation(fields: [procesoId], references: [id])
+  proceso           Proceso         @relation(fields: [procesoId], references: [id], onDelete: Cascade)
   preguntas         PreguntaFicha[]
   checklists        Checklist[]
   versiones         FichaVersionSnapshot[]
   incidencias       Incidencia[]
+  kpis              FichaKpi[]
+  riesgos           FichaRiesgo[]
+  documentos        FichaDocumento[]
+
+  @@index([procesoId])
+  @@index([activo])
+  @@index([version])
 }
 
 model FichaVersionSnapshot {
@@ -164,8 +214,12 @@ model FichaVersionSnapshot {
   contenido Json
   creadoPor String
   createdAt DateTime @default(now())
-  ficha     Ficha    @relation(fields: [fichaId], references: [id])
+
+  ficha     Ficha    @relation(fields: [fichaId], references: [id], onDelete: Cascade)
+
   @@unique([fichaId, version])
+  @@index([fichaId])
+  @@index([version])
 }
 
 model PreguntaFicha {
@@ -176,11 +230,59 @@ model PreguntaFicha {
   respuesta String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  ficha     Ficha    @relation(fields: [fichaId], references: [id])
+
+  ficha     Ficha    @relation(fields: [fichaId], references: [id], onDelete: Cascade)
+
   @@unique([fichaId, numero])
+  @@index([fichaId])
 }
 
-// ==================== TURNOS CONFIGURABLES ====================
+model FichaKpi {
+  id          String   @id @default(cuid())
+  fichaId     String
+  nombre      String
+  formula     String
+  meta        String?
+  frecuencia  String?
+  createdAt   DateTime @default(now())
+
+  ficha       Ficha    @relation(fields: [fichaId], references: [id], onDelete: Cascade)
+
+  @@index([fichaId])
+}
+
+model FichaRiesgo {
+  id            String   @id @default(cuid())
+  fichaId       String
+  tipo          String   // sanitario, operacional, financiero
+  descripcion   String
+  probabilidad  String   // baja, media, alta
+  impacto       String   // bajo, medio, alto, critico
+  mitigacion    String?
+  createdAt     DateTime @default(now())
+
+  ficha         Ficha    @relation(fields: [fichaId], references: [id], onDelete: Cascade)
+
+  @@index([fichaId])
+  @@index([tipo])
+}
+
+model FichaDocumento {
+  id          String   @id @default(cuid())
+  fichaId     String
+  url         String
+  tipo        String   // manual, normativa, video
+  version     String?
+  createdAt   DateTime @default(now())
+
+  ficha       Ficha    @relation(fields: [fichaId], references: [id], onDelete: Cascade)
+
+  @@index([fichaId])
+}
+
+// ============================================================
+// TURNOS Y CHECKLISTS
+// ============================================================
 
 model Turno {
   id         String   @id @default(cuid())
@@ -192,11 +294,12 @@ model Turno {
   orden      Int      @default(0)
   createdAt  DateTime @default(now())
 
-  sede       Sede     @relation(fields: [sedeId], references: [id])
+  sede       Sede     @relation(fields: [sedeId], references: [id], onDelete: Cascade)
   checklists Checklist[]
-}
 
-// ==================== CHECKLISTS ====================
+  @@index([sedeId])
+  @@index([activo])
+}
 
 model Checklist {
   id                 String   @id @default(cuid())
@@ -204,7 +307,7 @@ model Checklist {
   sedeId             String
   turnoId            String
   fecha              DateTime @default(now())
-  estado             String   @default("PENDIENTE")
+  estado             String   @default("PENDIENTE") // PENDIENTE, EN_PROGRESO, COMPLETADO, VERIFICADO, RECHAZADO
   ejecutadoPor       String
   supervisorId       String?
   fechaEjecucion     DateTime?
@@ -213,40 +316,72 @@ model Checklist {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  ficha              Ficha           @relation(fields: [fichaId], references: [id])
-  sede               Sede            @relation(fields: [sedeId], references: [id])
-  turno              Turno           @relation(fields: [turnoId], references: [id])
+  ficha              Ficha           @relation(fields: [fichaId], references: [id], onDelete: Cascade)
+  sede               Sede            @relation(fields: [sedeId], references: [id], onDelete: Cascade)
+  turno              Turno           @relation(fields: [turnoId], references: [id], onDelete: Cascade)
   ejecutor           Usuario         @relation("ejecutor", fields: [ejecutadoPor], references: [id])
   verificador        Usuario?        @relation("verificador", fields: [supervisorId], references: [id])
   items              ChecklistItem[]
   incidencias        Incidencia[]
+
+  @@index([fichaId])
+  @@index([sedeId])
+  @@index([turnoId])
+  @@index([ejecutadoPor])
+  @@index([supervisorId])
+  @@index([estado])
+  @@index([fecha])
 }
 
 model ChecklistItem {
-  id            String   @id @default(cuid())
-  checklistId   String
-  descripcion   String
-  tipo          String   @default("BOOLEAN")
-  valor         String?
-  completado    Boolean  @default(false)
-  evidenciaUrl  String?
-  nota          String?
-  orden         Int      @default(0)
-  createdAt     DateTime @default(now())
-  completadoPor String?
+  id                  String      @id @default(cuid())
+  checklistId         String
+  descripcion         String
+  tipo                String      @default("BOOLEAN") // BOOLEAN, NUMERO, TEXTO, HORA, FOTO
+  valor               String?
+  completado          Boolean     @default(false)
+  evidenciaRequerida  Boolean     @default(false)
+  nota                String?
+  orden               Int         @default(0)
+  createdAt           DateTime    @default(now())
+  completadoPor       String?
 
-  checklist     Checklist @relation(fields: [checklistId], references: [id])
+  checklist           Checklist   @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  completadoPorUser   Usuario?    @relation("itemCompletado", fields: [completadoPor], references: [id])
+  evidencias          Evidencia[]
+
+  @@index([checklistId])
+  @@index([completadoPor])
+  @@index([completado])
+  @@index([evidenciaRequerida])
+  @@index([orden])
 }
 
-// ==================== INCIDENCIAS ====================
+model Evidencia {
+  id              String   @id @default(cuid())
+  checklistItemId  String
+  url             String   // path en Supabase Storage bucket "evidencias"
+  tipo            String   @default("foto")
+  size            Int?
+  thumbnailUrl    String?
+  createdAt       DateTime @default(now())
+  subidoPor       String
+
+  checklistItem    ChecklistItem @relation(fields: [checklistItemId], references: [id], onDelete: Cascade)
+  usuario          Usuario       @relation(fields: [subidoPor], references: [id])
+
+  @@index([checklistItemId])
+  @@index([subidoPor])
+  @@index([createdAt])
+}
 
 model Incidencia {
   id              String   @id @default(cuid())
   checklistId     String?
   fichaId         String?
-  tipo            String   // FALTANTE, FALLA_EQUIPO, ROBO, CADUCIDAD, OTRO
+  tipo            String
   descripcion     String
-  gravedad        String   @default("BAJA") // BAJA, MEDIA, ALTA, CRITICA
+  gravedad        String   @default("BAJA")
   reportadoPor    String
   atendidoPor     String?
   accionTomada    String?
@@ -256,25 +391,72 @@ model Incidencia {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  checklist       Checklist?      @relation(fields: [checklistId], references: [id])
-  ficha           Ficha?          @relation(fields: [fichaId], references: [id])
+  checklist       Checklist?      @relation(fields: [checklistId], references: [id], onDelete: SetNull)
+  ficha           Ficha?          @relation(fields: [fichaId], references: [id], onDelete: SetNull)
   reportador      Usuario         @relation("reportador", fields: [reportadoPor], references: [id])
   atendedor       Usuario?        @relation("atendedor", fields: [atendidoPor], references: [id])
+
+  @@index([checklistId])
+  @@index([fichaId])
+  @@index([reportadoPor])
+  @@index([atendidoPor])
+  @@index([gravedad])
+  @@index([cerrado])
+  @@index([createdAt])
 }
 
-// ==================== REPORTES ====================
+model AuditLog {
+  id            String   @id @default(cuid())
+  entityType    String
+  entityId      String
+  action        String
+  fieldName     String?
+  oldValue      Json?
+  newValue      Json?
+  userId        String
+  ipAddress     String?
+  userAgent     String?
+  metadata      Json?
+  createdAt     DateTime @default(now())
+
+  usuario       Usuario  @relation(fields: [userId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([createdAt])
+  @@index([action])
+}
+
+model Session {
+  id            String    @id @default(cuid())
+  jti           String    @unique
+  usuarioId     String
+  revokedAt     DateTime?
+  expiresAt     DateTime
+  ip            String?
+  userAgent     String?
+  createdAt     DateTime  @default(now())
+
+  usuario       Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId])
+  @@index([revokedAt])
+  @@index([expiresAt])
+}
 
 model ReporteDiario {
-  id                 String   @id @default(cuid())
-  sedeId             String
-  fecha              DateTime
-  totalChecklists    Int      @default(0)
-  completados        Int      @default(0)
-  verificados        Int      @default(0)
-  incidencias        Int      @default(0)
-  incidenciasCriticas Int     @default(0)
-  createdAt          DateTime @default(now())
+  id                  String   @id @default(cuid())
+  sedeId              String
+  fecha               DateTime
+  totalChecklists     Int      @default(0)
+  completados         Int      @default(0)
+  verificados         Int      @default(0)
+  incidencias         Int      @default(0)
+  incidenciasCriticas Int      @default(0)
+  createdAt           DateTime @default(now())
 
-  sede               Sede     @relation(fields: [sedeId], references: [id])
+  sede                Sede     @relation(fields: [sedeId], references: [id], onDelete: Cascade)
+
   @@unique([sedeId, fecha])
+  @@index([fecha])
 }

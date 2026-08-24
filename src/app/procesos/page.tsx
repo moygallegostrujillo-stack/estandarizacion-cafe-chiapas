@@ -42,7 +42,7 @@ export default function ProcesosPage() {
   const [loading, setLoading] = useState(true);
   const [expandedArea, setExpandedArea] = useState<string | null>(null);
   const [selectedFicha, setSelectedFicha] = useState<{ codigo: string; ficha: Ficha } | null>(null);
-  const user = session?.user as any;
+  const user = session?.user as unknown as { name?: string };
 
   useEffect(() => {
     if (!user) return;
