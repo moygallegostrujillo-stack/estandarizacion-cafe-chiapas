@@ -2,12 +2,21 @@
 
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import IncidenciasBadge from "@/components/IncidenciasBadge";
 
 export default function InicioPage() {
   const { data: session } = useSession();
   const router = useRouter();
   const user = session?.user as unknown as { name?: string; rol: string };
+  const [stats, setStats] = useState<{ checklistsHoy: number; completadosHoy: number; cumplimiento: number; incidenciasAbiertas: number; incidenciasCriticas: number } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/dashboard")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d && setStats(d))
+      .catch(() => {});
+  }, []);
 
   if (!user) return null;
 
@@ -50,21 +59,21 @@ export default function InicioPage() {
       <main className="max-w-7xl mx-auto px-6 py-8">
         {/* KPI Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
+          <a href="/checklists" className="bg-zinc-900 rounded-xl p-6 border border-zinc-800 hover:border-zinc-700 transition text-left">
             <h3 className="text-zinc-400 text-sm font-medium">Checklists Hoy</h3>
-            <p className="text-3xl font-bold text-white mt-2">0</p>
-            <p className="text-xs text-zinc-500 mt-1">Ninguno asignado aun</p>
-          </div>
-          <div className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
+            <p className="text-3xl font-bold text-white mt-2">{stats ? stats.checklistsHoy : "—"}</p>
+            <p className="text-xs text-zinc-500 mt-1">{stats ? `${stats.checklistsHoy} asignados hoy` : "Cargando..."}</p>
+          </a>
+          <a href="/checklists" className="bg-zinc-900 rounded-xl p-6 border border-zinc-800 hover:border-zinc-700 transition text-left">
             <h3 className="text-zinc-400 text-sm font-medium">Completados</h3>
-            <p className="text-3xl font-bold text-green-400 mt-2">0</p>
-            <p className="text-xs text-zinc-500 mt-1">0% de cumplimiento</p>
-          </div>
-          <div className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
+            <p className="text-3xl font-bold text-green-400 mt-2">{stats ? stats.completadosHoy : "—"}</p>
+            <p className="text-xs text-zinc-500 mt-1">{stats ? `${stats.cumplimiento}% de cumplimiento` : "Cargando..."}</p>
+          </a>
+          <a href="/incidencias" className="bg-zinc-900 rounded-xl p-6 border border-zinc-800 hover:border-zinc-700 transition text-left">
             <h3 className="text-zinc-400 text-sm font-medium">Incidencias</h3>
-            <p className="text-3xl font-bold text-amber-400 mt-2">0</p>
-            <p className="text-xs text-zinc-500 mt-1">Sin reportes hoy</p>
-          </div>
+            <p className="text-3xl font-bold text-amber-400 mt-2">{stats ? stats.incidenciasAbiertas : "—"}</p>
+            <p className="text-xs text-zinc-500 mt-1">{stats ? `${stats.incidenciasCriticas} críticas · ${stats.incidenciasAbiertas} abiertas` : "Cargando..."}</p>
+          </a>
         </div>
 
         {/* Welcome card */}
