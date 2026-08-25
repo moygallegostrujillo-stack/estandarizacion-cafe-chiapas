@@ -11,7 +11,7 @@ type Checklist = {
   fecha: string;
   ficha: { proceso: { codigo: string; nombre: string; area: { nombre: string; color: string | null } } };
   turno: { nombre: string };
-  items: { id: string; descripcion: string; completado: boolean; evidenciaRequerida: boolean; tipo: string; valor: string | null; evidencias: { id: string; url: string }[] }[];
+  items: { id: string; descripcion: string; completado: boolean; evidenciaRequerida: boolean; tipo: string; valor: string | null; evidencias: { id: string; url: string; signedUrl?: string }[] }[];
 };
 
 type AreaOpt = {
@@ -95,12 +95,23 @@ export default function ChecklistsPage() {
 
   async function toggleItem(itemId: string, completado: boolean) {
     if (!selected) return;
-    await fetch(`/api/checklists/${selected.id}`, {
+    const res = await fetch(`/api/checklists/${selected.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ items: [{ id: itemId, completado }] }),
     });
-    setSelected((s) => (s ? { ...s, items: s.items.map((it) => (it.id === itemId ? { ...it, completado } : it)) } : null));
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({ error: "Error guardando check" }));
+      alert(d.error || "No se pudo guardar");
+      return;
+    }
+    // Recarga desde DB para que gerente vea el mismo estado (evita desmarcado fantasma)
+    const r = await fetch(`/api/checklists/${selected.id}`);
+    if (r.ok) {
+      const fresh = await r.json();
+      setSelected(fresh);
+      setChecklists((prev) => prev.map((c) => (c.id === fresh.id ? { ...c, items: fresh.items, estado: fresh.estado } : c)));
+    }
   }
 
   async function subirFoto(itemId: string, file: File) {
@@ -108,11 +119,22 @@ export default function ChecklistsPage() {
     fd.append("file", file);
     fd.append("checklistItemId", itemId);
     const res = await fetch("/api/evidencias", { method: "POST", body: fd });
-    if (!res.ok) alert((await res.json()).error);
-    else {
-      const r = await fetch(`/api/checklists/${selected!.id}`);
-      if (r.ok) setSelected(await r.json());
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({ error: "Error subiendo foto" }));
+      alert(d.error);
+      return;
     }
+    const evidencia = await res.json();
+    // Actualiza solo ese item localmente para no perder los checks marcados (evita refetch que reseteaba)
+    setSelected((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        items: prev.items.map((it) => (it.id === itemId ? { ...it, evidencias: [...it.evidencias, evidencia], valor: evidencia.url } : it)),
+      };
+    });
+    // También refresca la lista izquierda sin tocar el detalle seleccionado
+    loadChecklists();
   }
 
   async function completar() {
@@ -291,7 +313,18 @@ export default function ChecklistsPage() {
                       <div className="flex-1">
                         <p className={`text-sm ${it.completado ? "line-through text-zinc-500" : "text-white"}`}>{it.descripcion}</p>
                         {it.evidenciaRequerida && <span className="inline-block mt-1 text-xs px-2 py-0.5 bg-amber-900/40 text-amber-300 rounded">Foto requerida</span>}
-                        {it.evidencias.length > 0 && <p className="text-xs text-green-400 mt-1">✓ {it.evidencias.length} foto(s)</p>}
+                        {it.evidencias.length > 0 && (
+                          <div className="mt-2 space-y-1">
+                            <p className="text-xs text-green-400">✓ {it.evidencias.length} foto(s)</p>
+                            <div className="flex gap-2 flex-wrap">
+                              {(it.evidencias as unknown as { id: string; url: string; signedUrl?: string }[]).map((ev) => (
+                                <a key={ev.id} href={ev.signedUrl || "#"} target="_blank" rel="noopener noreferrer" className="block">
+                                  {ev.signedUrl ? <img src={ev.signedUrl} alt="evidencia" className="w-24 h-24 object-cover rounded-lg border border-zinc-700" /> : <span className="text-xs text-zinc-500">{ev.url.slice(0, 20)}...</span>}
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </label>
                     {it.evidenciaRequerida && (selected.estado === "PENDIENTE" || selected.estado === "EN_PROGRESO") && (

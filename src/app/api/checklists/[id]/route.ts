@@ -24,6 +24,17 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   });
 
   if (!data) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
+
+  // Añade signedUrl para fotos privadas (bucket evidencias)
+  try {
+    const { getSignedUrl } = await import("@/lib/storage");
+    for (const it of data.items) {
+      for (const ev of it.evidencias as unknown as { url: string; signedUrl?: string }[]) {
+        try { ev.signedUrl = await getSignedUrl(ev.url, 3600); } catch {}
+      }
+    }
+  } catch {}
+
   return NextResponse.json(data);
 }
 
