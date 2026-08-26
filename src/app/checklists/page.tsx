@@ -103,25 +103,35 @@ export default function ChecklistsPage() {
     setDraftItems([]);
   }
 
-  async function toggleItem(itemId: string, completado: boolean) {
+  async function setItemStatus(itemId: string, status: "CUMPLE" | "NO_CUMPLE") {
     if (!selected) return;
+    let nota: string | undefined;
+    if (status === "NO_CUMPLE") {
+      nota = prompt("Motivo no cumple (breve, ej. Sin plumones, refri 8°C):") || "";
+      if (!nota.trim()) return;
+    }
+    const body = status === "CUMPLE" ? { id: itemId, completado: true, valor: "CUMPLE", nota: null } : { id: itemId, completado: false, valor: "NO_CUMPLE", nota };
     const res = await fetch(`/api/checklists/${selected.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ items: [{ id: itemId, completado }] }),
+      body: JSON.stringify({ items: [body] }),
     });
     if (!res.ok) {
-      const d = await res.json().catch(() => ({ error: "Error guardando check" }));
+      const d = await res.json().catch(() => ({ error: "Error guardando" }));
       alert(d.error || "No se pudo guardar");
       return;
     }
-    // Recarga desde DB para que gerente vea el mismo estado (evita desmarcado fantasma)
     const r = await fetch(`/api/checklists/${selected.id}`);
     if (r.ok) {
       const fresh = await r.json();
       setSelected(fresh);
       setChecklists((prev) => prev.map((c) => (c.id === fresh.id ? { ...c, items: fresh.items, estado: fresh.estado } : c)));
     }
+  }
+
+  // Mantener toggleItem para compatibilidad pero delega a CUMPLE
+  async function toggleItem(itemId: string, completado: boolean) {
+    return setItemStatus(itemId, completado ? "CUMPLE" : "NO_CUMPLE");
   }
 
   async function subirFoto(itemId: string, file: File) {
@@ -317,33 +327,42 @@ export default function ChecklistsPage() {
                 <div>
                   <p className="text-xs font-mono text-zinc-500">{selected.ficha.proceso.codigo} · {selected.turno.nombre}</p>
                   <h2 className="text-lg font-bold">{selected.ficha.proceso.nombre}</h2>
-                  <p className="text-xs text-zinc-400">Estado: {selected.estado} · {selected.items.length} preguntas</p>
+                  <p className="text-xs text-zinc-400">Estado: {selected.estado} · {selected.items.length} preguntas · <span className={selected.items.filter((i) => (i as unknown as { valor: string | null }).valor === "NO_CUMPLE").length ? "text-red-400" : "text-green-400"}>{selected.items.filter((i) => (i as unknown as { valor: string | null }).valor === "NO_CUMPLE").length} no cumple</span></p>
                 </div>
-                <span className="text-xs px-2 py-1 bg-zinc-800 rounded-full">{selected.items.filter((i) => i.completado).length}/{selected.items.length}</span>
+                <span className="text-xs px-2 py-1 bg-zinc-800 rounded-full">
+                  {selected.items.filter((i) => i.completado || (i as unknown as { valor: string | null }).valor === "NO_CUMPLE").length}/{selected.items.length}
+                </span>
               </div>
 
               <div className="space-y-3">
-                {selected.items.map((it) => (
-                  <div key={it.id} className={`rounded-lg border p-4 ${it.completado ? "bg-zinc-800/50 border-zinc-700" : "bg-zinc-900 border-zinc-800"}`}>
-                    <label className="flex items-start gap-3 cursor-pointer">
-                      <input type="checkbox" checked={it.completado} onChange={(e) => toggleItem(it.id, e.target.checked)} className="mt-1 w-4 h-4 accent-amber-600" disabled={selected.estado !== "PENDIENTE" && selected.estado !== "EN_PROGRESO"} />
-                      <div className="flex-1">
-                        <p className={`text-sm ${it.completado ? "line-through text-zinc-500" : "text-white"}`}>{it.descripcion}</p>
-                        {it.evidenciaRequerida && <span className="inline-block mt-1 text-xs px-2 py-0.5 bg-amber-900/40 text-amber-300 rounded">Foto requerida</span>}
-                        {it.evidencias.length > 0 && (
-                          <div className="mt-2 space-y-1">
-                            <p className="text-xs text-green-400">✓ {it.evidencias.length} foto(s)</p>
-                            <div className="flex gap-2 flex-wrap">
-                              {(it.evidencias as unknown as { id: string; url: string; signedUrl?: string }[]).map((ev) => (
-                                <a key={ev.id} href={ev.signedUrl || "#"} target="_blank" rel="noopener noreferrer" className="block">
-                                  {ev.signedUrl ? <img src={ev.signedUrl} alt="evidencia" className="w-24 h-24 object-cover rounded-lg border border-zinc-700" /> : <span className="text-xs text-zinc-500">{ev.url.slice(0, 20)}...</span>}
-                                </a>
-                              ))}
+                {selected.items.map((it) => {
+                  const isNoCumple = (it as unknown as { valor: string | null }).valor === "NO_CUMPLE";
+                  const isEvaluado = it.completado || isNoCumple;
+                  return (
+                    <div key={it.id} className={`rounded-lg border p-3 ${it.completado ? "bg-green-900/20 border-green-800" : isNoCumple ? "bg-red-900/20 border-red-800" : "bg-zinc-900 border-zinc-800"}`}>
+                      <div className="flex items-start gap-3 w-full">
+                        <div className="flex gap-1.5 shrink-0">
+                          <button onClick={() => setItemStatus(it.id, "CUMPLE")} disabled={selected.estado !== "PENDIENTE" && selected.estado !== "EN_PROGRESO"} className={`w-8 h-8 rounded-full flex items-center justify-center text-sm border ${it.completado ? "bg-green-600 border-green-500 text-white" : "bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-green-600"}`} title="Cumple">✓</button>
+                          <button onClick={() => setItemStatus(it.id, "NO_CUMPLE")} disabled={selected.estado !== "PENDIENTE" && selected.estado !== "EN_PROGRESO"} className={`w-8 h-8 rounded-full flex items-center justify-center text-sm border ${isNoCumple ? "bg-red-600 border-red-500 text-white" : "bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-red-600"}`} title="No cumple">✕</button>
+                        </div>
+                        <div className="flex-1">
+                          <p className={`text-sm ${it.completado ? "text-green-300" : isNoCumple ? "text-red-300 line-through" : "text-white"}`}>{it.descripcion}</p>
+                          {it.evidenciaRequerida && <span className="inline-block mt-1 text-xs px-2 py-0.5 bg-amber-900/40 text-amber-300 rounded">Foto requerida</span>}
+                          {isNoCumple && (it as unknown as { nota: string | null }).nota && <p className="text-xs text-red-300 mt-1">✕ {(it as unknown as { nota: string }).nota}</p>}
+                          {it.evidencias.length > 0 && (
+                            <div className="mt-2 space-y-1">
+                              <p className="text-xs text-green-400">✓ {it.evidencias.length} foto(s)</p>
+                              <div className="flex gap-2 flex-wrap">
+                                {(it.evidencias as unknown as { id: string; url: string; signedUrl?: string }[]).map((ev) => (
+                                  <a key={ev.id} href={ev.signedUrl || "#"} target="_blank" rel="noopener noreferrer" className="block">
+                                    {ev.signedUrl ? <img src={ev.signedUrl} alt="evidencia" className="w-24 h-24 object-cover rounded-lg border border-zinc-700" /> : <span className="text-xs text-zinc-500">{ev.url.slice(0, 20)}...</span>}
+                                  </a>
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </div>
-                    </label>
                     {it.evidenciaRequerida && (selected.estado === "PENDIENTE" || selected.estado === "EN_PROGRESO") && (
                       <div className="mt-3">
                         <label className="text-xs bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 px-3 py-1.5 rounded-lg cursor-pointer inline-block">
@@ -353,15 +372,17 @@ export default function ChecklistsPage() {
                       </div>
                     )}
                   </div>
-                ))}
-              </div>
+                );
+              })}
+            </div>
 
               {selected.estado === "PENDIENTE" || selected.estado === "EN_PROGRESO" ? (
                 <>
                   {(() => {
                     const faltaFoto = selected.items.filter((it) => it.evidenciaRequerida && it.completado && it.evidencias.length === 0);
-                    const todosCompletados = selected.items.every((it) => it.completado);
-                    const bloqueado = faltaFoto.length > 0 || !todosCompletados;
+                    const evaluados = selected.items.filter((it) => it.completado || (it as unknown as { valor: string | null }).valor === "NO_CUMPLE").length;
+                    const bloqueado = faltaFoto.length > 0 || evaluados !== selected.items.length;
+                    const noCumpleCount = selected.items.filter((it) => (it as unknown as { valor: string | null }).valor === "NO_CUMPLE").length;
                     return (
                       <>
                         <button
@@ -369,7 +390,7 @@ export default function ChecklistsPage() {
                           disabled={bloqueado}
                           className={`w-full font-semibold py-3 rounded-lg transition ${bloqueado ? "bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700" : "bg-green-600 hover:bg-green-500 text-white"}`}
                         >
-                          {bloqueado ? (faltaFoto.length > 0 ? `Falta foto (${faltaFoto.length})` : "Marca todos los items") : "Marcar como completado ✓"}
+                          {bloqueado ? (faltaFoto.length > 0 ? `Falta foto (${faltaFoto.length})` : `Evalúa todos (${evaluados}/${selected.items.length})`) : noCumpleCount > 0 ? `Completar con ${noCumpleCount} no cumple → genera incidencia` : "Marcar como completado ✓"}
                         </button>
                         {errorMsg && <div className="bg-red-900/40 border border-red-800 text-red-300 text-sm px-4 py-2 rounded-lg">{errorMsg}</div>}
                         <p className="text-xs text-zinc-500 text-center">Demo flexible: {selected.items.length} items (5-7). Validación: todos completados + fotos requeridas.</p>

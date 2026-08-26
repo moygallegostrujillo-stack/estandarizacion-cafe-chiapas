@@ -70,29 +70,45 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       }
     }
 
-    // Actualizar items si vienen
+    // Actualizar items si vienen — soporta paloma/tache
     if (Array.isArray(body.items)) {
       for (const it of body.items as { id: string; completado?: boolean; valor?: string; nota?: string }[]) {
         if (!it.id) continue;
+        const isNoCumple = it.valor === "NO_CUMPLE";
         await tx.checklistItem.update({
           where: { id: it.id },
           data: {
-            completado: it.completado,
-            valor: it.valor,
+            completado: isNoCumple ? false : it.completado,
+            valor: it.valor ?? (it.completado ? "CUMPLE" : null),
             nota: it.nota,
-            completadoPor: it.completado ? user.id : null,
+            completadoPor: it.completado || isNoCumple ? user.id : null,
           },
         });
       }
     }
 
-    // Transición de estado con validaciones
+    // Transición de estado con validaciones — permite paloma/tache, pero todo debe estar evaluado
     let nextEstado = body.estado as string | undefined;
     if (nextEstado === "COMPLETADO") {
       const items = await tx.checklistItem.findMany({ where: { checklistId: id } });
-      const pendientes = items.filter((i) => !i.completado);
+      const pendientes = items.filter((i) => !i.completado && i.valor !== "NO_CUMPLE");
       if (pendientes.length > 0) {
-        throw new Error(`Faltan ${pendientes.length} items por completar`);
+        throw new Error(`Faltan ${pendientes.length} items por evaluar (marca ✅ o ❌)`);
+      }
+      // Auto-crea incidencias para los taches si aún no existen
+      for (const it of items.filter((i) => i.valor === "NO_CUMPLE")) {
+        const ya = await tx.incidencia.findFirst({ where: { checklistId: id, descripcion: { contains: it.descripcion.slice(0, 20) } } });
+        if (!ya) {
+          await tx.incidencia.create({
+            data: {
+              checklistId: id,
+              tipo: "OTRO",
+              descripcion: `No cumple: ${it.descripcion} — ${it.nota || "sin motivo"}`,
+              gravedad: "MEDIA",
+              reportadoPor: user.id,
+            },
+          });
+        }
       }
       const faltaEvidencia = items.filter((i) => i.evidenciaRequerida && i.completado);
       // Validar que items con evidenciaRequerida tengan al menos 1 evidencia
