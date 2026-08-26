@@ -55,21 +55,31 @@ export default function ChecklistsPage() {
     ]).finally(() => setLoading(false));
   }, [user]);
 
-  // Cuando cambia ficha, precargar draft desde sus 7 preguntas
+  // Cuando cambia ficha, precargar draft desde template operativo realista (no las 7 preguntas genéricas)
   useEffect(() => {
     if (!fichaId) { setDraftItems([]); return; }
-    const ficha = areas.flatMap((a) => a.procesos).find((p) => p.fichas[0]?.id === fichaId)?.fichas[0];
-    if (ficha?.preguntas?.length) {
-      setDraftItems(
-        ficha.preguntas.slice(0, 7).map((p) => ({
-          descripcion: `${p.numero}. ${p.pregunta}: ${p.respuesta.slice(0, 90)}`,
-          evidenciaRequerida: p.numero === 5,
-          tipo: p.numero === 5 ? "FOTO" : "BOOLEAN",
-        }))
-      );
-    } else {
-      setDraftItems([{ descripcion: "", evidenciaRequerida: false, tipo: "BOOLEAN" }]);
-    }
+    const proceso = areas.flatMap((a) => a.procesos).find((p) => p.fichas[0]?.id === fichaId);
+    if (!proceso) return;
+    // Intenta template medible por código (ej. BAR-01), si no existe usa las 7 preguntas como fallback
+    import("@/lib/checklist-templates").then(({ getChecklistTemplate }) => {
+      const tpl = getChecklistTemplate(proceso.codigo);
+      if (tpl) {
+        setDraftItems(tpl.map((t) => ({ descripcion: t.descripcion, evidenciaRequerida: t.evidenciaRequerida, tipo: t.evidenciaRequerida ? "FOTO" : "BOOLEAN" })));
+      } else {
+        const ficha = proceso.fichas[0] as unknown as { preguntas?: { numero: number; pregunta: string; respuesta: string }[] };
+        if (ficha?.preguntas?.length) {
+          setDraftItems(
+            ficha.preguntas.slice(0, 7).map((p) => ({
+              descripcion: `${p.numero}. ${p.pregunta}: ${p.respuesta.slice(0, 90)}`,
+              evidenciaRequerida: p.numero === 5,
+              tipo: p.numero === 5 ? "FOTO" : "BOOLEAN",
+            }))
+          );
+        } else {
+          setDraftItems([{ descripcion: "", evidenciaRequerida: false, tipo: "BOOLEAN" }]);
+        }
+      }
+    });
   }, [fichaId, areas]);
 
   async function crear() {
