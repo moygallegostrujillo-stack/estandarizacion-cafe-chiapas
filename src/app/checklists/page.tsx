@@ -146,19 +146,21 @@ export default function ChecklistsPage() {
       setErrorMsg(`Falta foto en: ${faltaFoto.map((f) => f.descripcion.slice(0, 35)).join(", ")} — sube foto con 📷`);
       return;
     }
-    const res = await fetch(`/api/checklists/${selected.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ estado: "COMPLETADO" }),
-    });
-    if (!res.ok) {
-      let data: { error?: string } = {};
-      try { data = await res.json(); } catch { data = { error: "Error al completar" }; }
-      setErrorMsg(data.error || "Error al completar");
-    } else {
-      const data = await res.json();
-      setSelected(data);
+    try {
+      const res = await fetch(`/api/checklists/${selected.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ estado: "COMPLETADO" }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setErrorMsg((data as { error?: string })?.error || "Error al completar — recarga la página");
+        return;
+      }
+      if (data) setSelected(data);
       loadChecklists();
+    } catch (e) {
+      setErrorMsg("Error de conexión — recarga y vuelve a intentar");
     }
   }
 
@@ -169,16 +171,21 @@ export default function ChecklistsPage() {
       motivo = prompt("Motivo del rechazo:") || "";
       if (!motivo.trim()) return;
     }
-    const res = await fetch(`/api/checklists/${selected.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ estado, motivo }),
-    });
-    if (!res.ok) alert((await res.json()).error || (await res.text()));
-    else {
-      const data = await res.json();
-      setSelected(data);
+    try {
+      const res = await fetch(`/api/checklists/${selected.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ estado, motivo }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        alert((data as { error?: string })?.error || "No se pudo verificar — ¿estás verificando tu propio checklist? Entra como supervisor@cafe.com");
+        return;
+      }
+      if (data) setSelected(data);
       loadChecklists();
+    } catch {
+      alert("Error de conexión al verificar");
     }
   }
 
