@@ -127,7 +127,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return tx.checklist.update({
       where: { id },
       data: data as never,
-      include: { items: { include: { evidencias: true } }, ficha: { include: { proceso: true } } },
+      include: { items: { include: { evidencias: true } }, ficha: { include: { proceso: { include: { area: true } } } }, turno: true, ejecutor: { select: { nombre: true, email: true } }, verificador: { select: { nombre: true } } },
     });
     });
     return NextResponse.json(updated);
