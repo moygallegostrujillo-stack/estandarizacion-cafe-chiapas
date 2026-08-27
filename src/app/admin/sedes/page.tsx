@@ -16,12 +16,26 @@ export default function SedesAdminPage() {
   const [telefono, setTelefono] = useState("");
   const [creating, setCreating] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Sede | null>(null);
+  const [editNombre, setEditNombre] = useState("");
+  const [editDireccion, setEditDireccion] = useState("");
+  const [editTelefono, setEditTelefono] = useState("");
+  const [editActivo, setEditActivo] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   async function load() {
     const res = await fetch("/api/sedes");
     if (res.ok) setSedes(await res.json());
   }
   useEffect(() => { load(); }, []);
+
+  function openEdit(s: Sede) {
+    setEditing(s);
+    setEditNombre(s.nombre);
+    setEditDireccion(s.direccion || "");
+    setEditTelefono(s.telefono || "");
+    setEditActivo(s.activo);
+  }
 
   async function crear(e: React.FormEvent) {
     e.preventDefault();
@@ -43,7 +57,25 @@ export default function SedesAdminPage() {
     }
   }
 
-  if (!esSuper) return <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center p-8 text-center">Solo SUPER_ADMIN (admin@cafe.com) puede crear sedes. Tu rol: {rol}</div>;
+  async function guardarEdicion(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editing) return;
+    setSaving(true);
+    const res = await fetch("/api/sedes", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: editing.id, nombre: editNombre, direccion: editDireccion, telefono: editTelefono, activo: editActivo }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setSaving(false);
+    if (!res.ok) alert(data.error || "Error guardando");
+    else {
+      setEditing(null);
+      load();
+    }
+  }
+
+  if (!esSuper) return <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center p-8 text-center">Solo SUPER_ADMIN (admin@cafe.com) puede gestionar sedes. Tu rol: {rol}</div>;
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white">
@@ -78,14 +110,7 @@ export default function SedesAdminPage() {
                   <p className="text-xs text-zinc-500 mt-1">{s._count.areas} áreas · {s._count.usuarios} usuarios</p>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={async () => {
-                    const n = prompt("Nuevo nombre", s.nombre);
-                    if (!n || n.trim() === s.nombre) return;
-                    const d = prompt("Nueva dirección", s.direccion || "") || "";
-                    const t = prompt("Nuevo teléfono", s.telefono || "") || "";
-                    const res = await fetch("/api/sedes", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: s.id, nombre: n, direccion: d, telefono: t }) });
-                    if (res.ok) load(); else alert((await res.json()).error);
-                  }} className="text-xs px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg">✏️ Editar</button>
+                  <button onClick={() => openEdit(s)} className="text-xs px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg">✏️ Editar</button>
                   {s.id !== "demo-sede-001" && (
                     <button onClick={async () => {
                       if (!confirm(`¿Eliminar ${s.nombre}? Borra áreas, procesos, fichas y checklists de esta sede (no se puede deshacer)`)) return;
@@ -101,6 +126,35 @@ export default function SedesAdminPage() {
           {sedes.length >= 3 && <p className="text-xs text-amber-400 text-center">Demo limitado a 3 sucursales</p>}
         </div>
       </main>
+
+      {editing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setEditing(null)}>
+          <form onClick={(e) => e.stopPropagation()} onSubmit={guardarEdicion} className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-4">
+            <h3 className="font-bold text-white">✏️ Editar sucursal</h3>
+            <p className="text-xs font-mono text-zinc-500">{editing.id}</p>
+            <label className="space-y-1">
+              <span className="text-xs text-zinc-400">Nombre *</span>
+              <input value={editNombre} onChange={(e) => setEditNombre(e.target.value)} required className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm" />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs text-zinc-400">Dirección</span>
+              <input value={editDireccion} onChange={(e) => setEditDireccion(e.target.value)} placeholder="Av. Principal 123" className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm" />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs text-zinc-400">Teléfono</span>
+              <input value={editTelefono} onChange={(e) => setEditTelefono(e.target.value)} placeholder="+52 961 123 4567" className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm" />
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={editActivo} onChange={(e) => setEditActivo(e.target.checked)} className="accent-amber-600" />
+              Activa
+            </label>
+            <div className="flex gap-3">
+              <button type="button" onClick={() => setEditing(null)} className="flex-1 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white py-2 rounded-lg text-sm">Cancelar</button>
+              <button type="submit" disabled={saving} className="flex-1 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white font-semibold py-2 rounded-lg text-sm">{saving ? "Guardando..." : "Guardar"}</button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
