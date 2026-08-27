@@ -22,6 +22,7 @@ export default function InicioPage() {
 
   const rol = (user as unknown as { rol: string }).rol || "STAFF";
   const esAdmin = rol === "SUPER_ADMIN" || rol === "GERENTE" || rol === "JEFE_AREA";
+  const esSuperAdmin = rol === "SUPER_ADMIN";
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white">
@@ -39,6 +40,9 @@ export default function InicioPage() {
               <IncidenciasBadge />
               {esAdmin && (
                 <a href="/reportes" className="text-zinc-400 hover:text-white transition">Reportes</a>
+              )}
+              {esSuperAdmin && (
+                <a href="/admin/sedes" className="text-amber-400 hover:text-amber-300 transition font-medium border border-amber-800 bg-amber-900/20 px-3 py-1 rounded-full">Sucursales</a>
               )}
             </nav>
           </div>
@@ -86,6 +90,9 @@ export default function InicioPage() {
               ? "Accede a procesos, reportes y configuracion desde el menu superior."
               : "Revisa tus checklists y tareas del dia."}
           </p>
+          {esSuperAdmin && (
+            <a href="/admin/sedes" className="inline-block mt-4 bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold px-5 py-2 rounded-lg">🏢 Gestionar Sucursales →</a>
+          )}
         </div>
       </main>
     </div>
