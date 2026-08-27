@@ -70,10 +70,31 @@ export default function SedesAdminPage() {
           <h2 className="font-semibold">Sucursales ({sedes.length}) — máx 3 para demo</h2>
           {sedes.map((s) => (
             <div key={s.id} className="bg-zinc-900 rounded-xl border border-zinc-800 p-4">
-              <p className="font-medium text-sm">{s.nombre}</p>
-              <p className="text-xs font-mono text-zinc-500">{s.id} · {s.activo ? "Activa" : "Inactiva"}</p>
-              <p className="text-xs text-zinc-400">{s.direccion || "Sin dirección"} · {s.telefono || "Sin teléfono"}</p>
-              <p className="text-xs text-zinc-500 mt-1">{s._count.areas} áreas · {s._count.usuarios} usuarios</p>
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="font-medium text-sm">{s.nombre}</p>
+                  <p className="text-xs font-mono text-zinc-500">{s.id} · {s.activo ? "Activa" : "Inactiva"}</p>
+                  <p className="text-xs text-zinc-400">{s.direccion || "Sin dirección"} · {s.telefono || "Sin teléfono"}</p>
+                  <p className="text-xs text-zinc-500 mt-1">{s._count.areas} áreas · {s._count.usuarios} usuarios</p>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={async () => {
+                    const n = prompt("Nuevo nombre", s.nombre);
+                    if (!n || n.trim() === s.nombre) return;
+                    const d = prompt("Nueva dirección", s.direccion || "") || "";
+                    const t = prompt("Nuevo teléfono", s.telefono || "") || "";
+                    const res = await fetch("/api/sedes", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: s.id, nombre: n, direccion: d, telefono: t }) });
+                    if (res.ok) load(); else alert((await res.json()).error);
+                  }} className="text-xs px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg">✏️ Editar</button>
+                  {s.id !== "demo-sede-001" && (
+                    <button onClick={async () => {
+                      if (!confirm(`¿Eliminar ${s.nombre}? Borra áreas, procesos, fichas y checklists de esta sede (no se puede deshacer)`)) return;
+                      const res = await fetch(`/api/sedes?id=${s.id}`, { method: "DELETE" });
+                      if (res.ok) load(); else alert((await res.json()).error);
+                    }} className="text-xs px-3 py-1.5 bg-red-900/40 hover:bg-red-900/60 border border-red-800 text-red-300 rounded-lg">🗑️ Eliminar</button>
+                  )}
+                </div>
+              </div>
             </div>
           ))}
           {sedes.length === 0 && <p className="text-sm text-zinc-500 text-center py-8">Sin sedes</p>}

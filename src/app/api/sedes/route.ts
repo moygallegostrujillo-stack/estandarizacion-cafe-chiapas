@@ -83,3 +83,37 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ id: nueva.id, nombre: nueva.nombre, totalFichas }, { status: 201 });
 }
+
+export async function PATCH(req: Request) {
+  const session = await auth();
+  const user = session?.user as unknown as { id: string; rol: string } | null;
+  if (!user || user.rol !== "SUPER_ADMIN") return NextResponse.json({ error: "Solo SUPER_ADMIN" }, { status: 403 });
+  const body = await req.json() as { id: string; nombre?: string; direccion?: string; telefono?: string; activo?: boolean };
+  if (!body.id) return NextResponse.json({ error: "id requerido" }, { status: 400 });
+  const sede = await prisma.sede.update({
+    where: { id: body.id },
+    data: {
+      nombre: body.nombre?.trim(),
+      direccion: body.direccion !== undefined ? body.direccion?.trim() || null : undefined,
+      telefono: body.telefono !== undefined ? body.telefono?.trim() || null : undefined,
+      activo: body.activo,
+    },
+  });
+  await prisma.auditLog.create({ data: { entityType: "Sede", entityId: sede.id, action: "UPDATE", userId: user.id, newValue: body as never } });
+  return NextResponse.json(sede);
+}
+
+export async function DELETE(req: Request) {
+  const session = await auth();
+  const user = session?.user as unknown as { id: string; rol: string } | null;
+  if (!user || user.rol !== "SUPER_ADMIN") return NextResponse.json({ error: "Solo SUPER_ADMIN" }, { status: 403 });
+  const { searchParams } = new URL(req.url);
+  const id = searchParams.get("id");
+  if (!id) return NextResponse.json({ error: "id requerido" }, { status: 400 });
+  if (id === "demo-sede-001") return NextResponse.json({ error: "No se puede eliminar la sede demo principal" }, { status: 400 });
+  const count = await prisma.sede.count({ where: { id } });
+  if (!count) return NextResponse.json({ error: "No encontrada" }, { status: 404 });
+  await prisma.sede.delete({ where: { id } });
+  await prisma.auditLog.create({ data: { entityType: "Sede", entityId: id, action: "DELETE", userId: user.id } });
+  return NextResponse.json({ ok: true });
+}
