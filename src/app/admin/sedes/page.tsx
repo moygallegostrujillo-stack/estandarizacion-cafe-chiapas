@@ -1,0 +1,85 @@
+"use client";
+
+import { useSession } from "next-auth/react";
+import { useEffect, useState } from "react";
+
+type Sede = { id: string; nombre: string; direccion: string | null; telefono: string | null; activo: boolean; _count: { usuarios: number; areas: number } };
+
+export default function SedesAdminPage() {
+  const { data: session } = useSession();
+  const user = session?.user as unknown as { rol: string } | null;
+  const rol = user?.rol || "STAFF";
+  const esSuper = rol === "SUPER_ADMIN";
+  const [sedes, setSedes] = useState<Sede[]>([]);
+  const [nombre, setNombre] = useState("");
+  const [direccion, setDireccion] = useState("");
+  const [telefono, setTelefono] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  async function load() {
+    const res = await fetch("/api/sedes");
+    if (res.ok) setSedes(await res.json());
+  }
+  useEffect(() => { load(); }, []);
+
+  async function crear(e: React.FormEvent) {
+    e.preventDefault();
+    if (!nombre.trim()) return;
+    setCreating(true);
+    setMsg(null);
+    const res = await fetch("/api/sedes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nombre, direccion, telefono }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setCreating(false);
+    if (!res.ok) setMsg(data.error || "Error creando sede");
+    else {
+      setMsg(`✓ ${data.nombre} creada con ${data.totalFichas} fichas clonadas`);
+      setNombre(""); setDireccion(""); setTelefono("");
+      load();
+    }
+  }
+
+  if (!esSuper) return <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center p-8 text-center">Solo SUPER_ADMIN (admin@cafe.com) puede crear sedes. Tu rol: {rol}</div>;
+
+  return (
+    <div className="min-h-screen bg-zinc-950 text-white">
+      <header className="border-b border-zinc-800 px-6 py-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <h1 className="text-xl font-bold text-amber-400">Admin — Sucursales</h1>
+          <a href="/inicio" className="text-sm text-zinc-400 hover:text-white">← Inicio</a>
+        </div>
+      </header>
+      <main className="max-w-7xl mx-auto px-6 py-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-6">
+          <h2 className="font-semibold mb-4">Nueva sucursal (clona 54 fichas de demo-sede-001)</h2>
+          <form onSubmit={crear} className="space-y-3">
+            <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Nombre ej. Café DeChiapas — Centro" required className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm" />
+            <input value={direccion} onChange={(e) => setDireccion(e.target.value)} placeholder="Dirección (opcional)" className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm" />
+            <input value={telefono} onChange={(e) => setTelefono(e.target.value)} placeholder="Teléfono (opcional)" className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm" />
+            <button type="submit" disabled={creating} className="w-full bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white font-semibold py-2 rounded-lg text-sm">{creating ? "Clonando 54 fichas..." : "Crear sucursal"}</button>
+            {msg && <p className={`text-sm px-3 py-2 rounded-lg ${msg.startsWith("✓") ? "bg-green-900/30 text-green-300" : "bg-red-900/30 text-red-300"}`}>{msg}</p>}
+          </form>
+          <p className="text-xs text-zinc-500 mt-3">Clona: config, 3 turnos, 8 áreas, 54 procesos, fichas, preguntas, KPIs y riesgos. ~2s.</p>
+        </div>
+
+        <div className="space-y-3">
+          <h2 className="font-semibold">Sucursales ({sedes.length}) — máx 3 para demo</h2>
+          {sedes.map((s) => (
+            <div key={s.id} className="bg-zinc-900 rounded-xl border border-zinc-800 p-4">
+              <p className="font-medium text-sm">{s.nombre}</p>
+              <p className="text-xs font-mono text-zinc-500">{s.id} · {s.activo ? "Activa" : "Inactiva"}</p>
+              <p className="text-xs text-zinc-400">{s.direccion || "Sin dirección"} · {s.telefono || "Sin teléfono"}</p>
+              <p className="text-xs text-zinc-500 mt-1">{s._count.areas} áreas · {s._count.usuarios} usuarios</p>
+            </div>
+          ))}
+          {sedes.length === 0 && <p className="text-sm text-zinc-500 text-center py-8">Sin sedes</p>}
+          {sedes.length >= 3 && <p className="text-xs text-amber-400 text-center">Demo limitado a 3 sucursales</p>}
+        </div>
+      </main>
+    </div>
+  );
+}
