@@ -32,3 +32,7 @@ html:not(.light) .bg-white { background-color: #18181b !important; }
 html:not(.light) .text-gray-900 { color: #fafafa !important; }
 html:not(.light) .text-gray-600 { color: #a1a1aa !important; }
 html:not(.light) .border { border-color: #27272a !important; }
+/* Fix contraste Información del sistema en oscuro */
+html:not(.light) .bg-white h3 { color: #fafafa !important; }
+html:not(.light) .bg-white dd { color: #e4e4e7 !important; }
+html:not(.light) .bg-white dt { color: #a1a1aa !important; }
