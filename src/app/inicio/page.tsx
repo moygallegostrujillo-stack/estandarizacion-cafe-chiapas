@@ -6,6 +6,8 @@ import { withUserContext } from "@/lib/db-session";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import ThemeToggle from "@/components/ThemeToggle";
+import LogoutButton from "@/components/LogoutButton";
 
 export default async function InicioPage() {
   const user = await getCurrentUser();
@@ -47,14 +49,8 @@ export default async function InicioPage() {
             <span className="text-sm text-gray-600">
               {user.nombre} · <span className="font-medium">{user.rol}</span>
             </span>
-            <form action="/api/auth/signout" method="post">
-              <button
-                type="submit"
-                className="text-sm text-gray-600 hover:text-gray-900"
-              >
-                Cerrar sesión
-              </button>
-            </form>
+            <ThemeToggle />
+            <LogoutButton />
           </div>
         </div>
       </header>

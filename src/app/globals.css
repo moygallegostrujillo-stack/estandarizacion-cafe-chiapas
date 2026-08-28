@@ -25,3 +25,10 @@ html.light .text-white { color: #18181b !important; }
 html.light .text-zinc-400 { color: #71717a !important; }
 html.light .text-zinc-500 { color: #71717a !important; }
 html.light .text-zinc-300 { color: #3f3f46 !important; }
+
+/* Dark overrides for light pages (inicio, admin/usuarios) cuando NO hay .light */
+html:not(.light) .bg-gray-50 { background-color: #09090b !important; }
+html:not(.light) .bg-white { background-color: #18181b !important; }
+html:not(.light) .text-gray-900 { color: #fafafa !important; }
+html:not(.light) .text-gray-600 { color: #a1a1aa !important; }
+html:not(.light) .border { border-color: #27272a !important; }

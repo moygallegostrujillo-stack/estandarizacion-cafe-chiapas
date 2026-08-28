@@ -5,6 +5,8 @@ import { getCurrentUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import UsuariosClient from "./UsuariosClient";
+import ThemeToggle from "@/components/ThemeToggle";
+import LogoutButton from "@/components/LogoutButton";
 
 export default async function AdminUsuariosPage() {
   const user = await getCurrentUser();
@@ -19,7 +21,11 @@ export default async function AdminUsuariosPage() {
             <Link href="/inicio" className="text-sm text-gray-600 hover:text-gray-900">← Dashboard</Link>
             <h1 className="text-lg font-bold text-gray-900">Empleados / Usuarios</h1>
           </div>
-          <span className="text-sm text-gray-600">{user.nombre} · {user.rol}</span>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-gray-600">{user.nombre} · {user.rol}</span>
+            <ThemeToggle />
+            <LogoutButton />
+          </div>
         </div>
       </header>
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
