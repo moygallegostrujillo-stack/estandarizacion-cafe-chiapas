@@ -1,102 +1,165 @@
-"use client";
+// ============================================================
+// src/app/inicio/page.tsx — Dashboard principal
+// ============================================================
+import { getCurrentUser } from "@/lib/auth";
+import { withUserContext } from "@/lib/db-session";
+import { prisma } from "@/lib/prisma";
+import { redirect } from "next/navigation";
+import Link from "next/link";
 
-import { useSession, signOut } from "next-auth/react";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import IncidenciasBadge from "@/components/IncidenciasBadge";
-import ThemeToggle from "@/components/ThemeToggle";
+export default async function InicioPage() {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
 
-export default function InicioPage() {
-  const { data: session } = useSession();
-  const router = useRouter();
-  const user = session?.user as unknown as { name?: string; rol: string };
-  const [stats, setStats] = useState<{ checklistsHoy: number; completadosHoy: number; cumplimiento: number; incidenciasAbiertas: number; incidenciasCriticas: number } | null>(null);
+  // Cargar datos con contexto RLS
+  const data = await withUserContext(
+    user.id,
+    user.rol,
+    user.sedeId,
+    async (tx) => {
+      // Conteos básicos para el dashboard
+      const [checklistsHoy, incidenciasAbiertas, fichasActivas] = await Promise.all([
+        tx.checklist.count({
+          where: {
+            sedeId: user.sedeId || "",
+            fecha: { gte: new Date(new Date().setHours(0, 0, 0, 0)) },
+          },
+        }),
+        tx.incidencia.count({
+          where: { cerrado: false },
+        }),
+        tx.ficha.count({
+          where: { activo: true },
+        }),
+      ]);
 
-  useEffect(() => {
-    fetch("/api/dashboard")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => d && setStats(d))
-      .catch(() => {});
-  }, []);
-
-  if (!user) return null;
-
-  const rol = (user as unknown as { rol: string }).rol || "STAFF";
-  const esAdmin = rol === "SUPER_ADMIN" || rol === "GERENTE" || rol === "JEFE_AREA";
-  const esSuperAdmin = rol === "SUPER_ADMIN";
+      return { checklistsHoy, incidenciasAbiertas, fichasActivas };
+    }
+  );
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white">
+    <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="border-b border-zinc-800 px-6 py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-8">
-            <h1 className="text-xl font-bold text-amber-400">Cafe DeChiapas</h1>
-            <nav className="hidden md:flex items-center gap-6 text-sm">
-              <a href="/inicio" className="text-amber-400 font-medium">Inicio</a>
-              {esAdmin && (
-                <a href="/procesos" className="text-zinc-400 hover:text-white transition">Procesos</a>
-              )}
-              <a href="/checklists" className="text-zinc-400 hover:text-white transition">Checklists</a>
-              <IncidenciasBadge />
-              {esAdmin && (
-                <a href="/reportes" className="text-zinc-400 hover:text-white transition">Reportes</a>
-              )}
-              {esSuperAdmin && (
-                <a href="/admin/sedes" className="text-amber-400 hover:text-amber-300 transition font-medium border border-amber-800 bg-amber-900/20 px-3 py-1 rounded-full">Sucursales</a>
-              )}
-            </nav>
-          </div>
+      <header className="bg-white border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+          <h1 className="text-xl font-bold text-gray-900">Café DeChiapas</h1>
           <div className="flex items-center gap-4">
-            <ThemeToggle />
-            <span className="text-sm text-zinc-400">{user.name}</span>
-            <span className="text-xs px-2 py-1 bg-zinc-800 rounded-full text-zinc-300">{rol}</span>
-            <button
-              onClick={() => signOut({ callbackUrl: "/auth/login" })}
-              className="text-xs px-3 py-1.5 bg-red-900/50 hover:bg-red-800 text-red-300 rounded-lg transition"
-            >
-              Cerrar sesion
-            </button>
+            <span className="text-sm text-gray-600">
+              {user.nombre} · <span className="font-medium">{user.rol}</span>
+            </span>
+            <form action="/api/auth/signout" method="post">
+              <button
+                type="submit"
+                className="text-sm text-gray-600 hover:text-gray-900"
+              >
+                Cerrar sesión
+              </button>
+            </form>
           </div>
         </div>
       </header>
 
-      {/* Main content */}
-      <main className="max-w-7xl mx-auto px-6 py-8">
-        {/* KPI Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <a href="/checklists" className="bg-zinc-900 rounded-xl p-6 border border-zinc-800 hover:border-zinc-700 transition text-left">
-            <h3 className="text-zinc-400 text-sm font-medium">Checklists Hoy</h3>
-            <p className="text-3xl font-bold text-white mt-2">{stats ? stats.checklistsHoy : "—"}</p>
-            <p className="text-xs text-zinc-500 mt-1">{stats ? `${stats.checklistsHoy} asignados hoy` : "Cargando..."}</p>
-          </a>
-          <a href="/checklists" className="bg-zinc-900 rounded-xl p-6 border border-zinc-800 hover:border-zinc-700 transition text-left">
-            <h3 className="text-zinc-400 text-sm font-medium">Completados</h3>
-            <p className="text-3xl font-bold text-green-400 mt-2">{stats ? stats.completadosHoy : "—"}</p>
-            <p className="text-xs text-zinc-500 mt-1">{stats ? `${stats.cumplimiento}% de cumplimiento` : "Cargando..."}</p>
-          </a>
-          <a href="/incidencias" className="bg-zinc-900 rounded-xl p-6 border border-zinc-800 hover:border-zinc-700 transition text-left">
-            <h3 className="text-zinc-400 text-sm font-medium">Incidencias</h3>
-            <p className="text-3xl font-bold text-amber-400 mt-2">{stats ? stats.incidenciasAbiertas : "—"}</p>
-            <p className="text-xs text-zinc-500 mt-1">{stats ? `${stats.incidenciasCriticas} críticas · ${stats.incidenciasAbiertas} abiertas` : "Cargando..."}</p>
-          </a>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <h2 className="text-2xl font-bold text-gray-900 mb-6">Dashboard</h2>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <StatCard
+            title="Checklists de hoy"
+            value={data.checklistsHoy}
+            href="/checklists"
+            color="orange"
+          />
+          <StatCard
+            title="Incidencias abiertas"
+            value={data.incidenciasAbiertas}
+            href="/incidencias"
+            color="red"
+          />
+          <StatCard
+            title="Fichas activas"
+            value={data.fichasActivas}
+            href="/fichas"
+            color="blue"
+          />
         </div>
 
-        {/* Welcome card */}
-        <div className="bg-zinc-900 rounded-xl p-6 border border-zinc-800">
-          <h2 className="text-lg font-semibold mb-2">
-            Bienvenido, {user.name}
-          </h2>
-          <p className="text-zinc-400">
-            {esAdmin
-              ? "Accede a procesos, reportes y configuracion desde el menu superior."
-              : "Revisa tus checklists y tareas del dia."}
-          </p>
-          {esSuperAdmin && (
-            <a href="/admin/sedes" className="inline-block mt-4 bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold px-5 py-2 rounded-lg">🏢 Gestionar Sucursales →</a>
-          )}
+        <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="font-semibold text-gray-900 mb-4">Accesos rápidos</h3>
+            <div className="space-y-2">
+              <Link href="/checklists" className="block text-orange-600 hover:underline">
+                → Ver y ejecutar checklists
+              </Link>
+              <Link href="/incidencias" className="block text-orange-600 hover:underline">
+                → Reportar incidencia
+              </Link>
+              <Link href="/fichas" className="block text-orange-600 hover:underline">
+                → Consultar fichas de proceso
+              </Link>
+              {["GERENTE", "SUPER_ADMIN", "JEFE_AREA"].includes(user.rol) && (
+                <Link href="/reportes" className="block text-orange-600 hover:underline">
+                  → Ver reportes y KPIs
+                </Link>
+              )}
+              {user.rol === "SUPER_ADMIN" && (
+                <Link href="/admin/usuarios" className="block text-orange-600 hover:underline">
+                  → Administrar empleados / usuarios
+                </Link>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="font-semibold text-gray-900 mb-4">Información del sistema</h3>
+            <dl className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <dt className="text-gray-600">Versión:</dt>
+                <dd className="font-medium">2.1.0</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-gray-600">Usuario:</dt>
+                <dd className="font-medium">{user.email}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-gray-600">Rol:</dt>
+                <dd className="font-medium">{user.rol}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-gray-600">Sede:</dt>
+                <dd className="font-medium">{user.sedeId ? "Asignada" : "Sin sede"}</dd>
+              </div>
+            </dl>
+          </div>
         </div>
       </main>
     </div>
+  );
+}
+
+function StatCard({
+  title,
+  value,
+  href,
+  color,
+}: {
+  title: string;
+  value: number;
+  href: string;
+  color: "orange" | "red" | "blue";
+}) {
+  const colorClasses = {
+    orange: "bg-orange-50 border-orange-200 text-orange-700",
+    red: "bg-red-50 border-red-200 text-red-700",
+    blue: "bg-blue-50 border-blue-200 text-blue-700",
+  };
+
+  return (
+    <Link
+      href={href}
+      className={`block rounded-lg border p-6 hover:shadow-md transition-shadow ${colorClasses[color]}`}
+    >
+      <p className="text-sm font-medium">{title}</p>
+      <p className="mt-2 text-3xl font-bold">{value}</p>
+    </Link>
   );
 }

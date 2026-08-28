@@ -119,7 +119,7 @@ export function validateInput<T>(
   if (!result.success) {
     return {
       success: false,
-      error: result.error.issues.map((e) => `${e.path.join(".")}: ${e.message}`).join("; "),
+      error: result.error.issues.map((e: z.ZodIssue) => `${e.path.join(".")}: ${e.message}`).join("; "),
     };
   }
   return { success: true, data: result.data };
