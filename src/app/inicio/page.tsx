@@ -4,6 +4,7 @@ import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import IncidenciasBadge from "@/components/IncidenciasBadge";
+import ThemeToggle from "@/components/ThemeToggle";
 
 export default function InicioPage() {
   const { data: session } = useSession();
@@ -47,6 +48,7 @@ export default function InicioPage() {
             </nav>
           </div>
           <div className="flex items-center gap-4">
+            <ThemeToggle />
             <span className="text-sm text-zinc-400">{user.name}</span>
             <span className="text-xs px-2 py-1 bg-zinc-800 rounded-full text-zinc-300">{rol}</span>
             <button

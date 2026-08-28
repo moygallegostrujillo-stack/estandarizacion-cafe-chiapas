@@ -1,4 +1,5 @@
 "use client";
+import ThemeToggle from "@/components/ThemeToggle";
 
 import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
@@ -29,14 +30,6 @@ export default function SedesAdminPage() {
   }
   useEffect(() => { load(); }, []);
 
-  function openEdit(s: Sede) {
-    setEditing(s);
-    setEditNombre(s.nombre);
-    setEditDireccion(s.direccion || "");
-    setEditTelefono(s.telefono || "");
-    setEditActivo(s.activo);
-  }
-
   async function crear(e: React.FormEvent) {
     e.preventDefault();
     if (!nombre.trim()) return;
@@ -55,6 +48,14 @@ export default function SedesAdminPage() {
       setNombre(""); setDireccion(""); setTelefono("");
       load();
     }
+  }
+
+  function openEdit(s: Sede) {
+    setEditing(s);
+    setEditNombre(s.nombre);
+    setEditDireccion(s.direccion || "");
+    setEditTelefono(s.telefono || "");
+    setEditActivo(s.activo);
   }
 
   async function guardarEdicion(e: React.FormEvent) {
@@ -82,7 +83,10 @@ export default function SedesAdminPage() {
       <header className="border-b border-zinc-800 px-6 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <h1 className="text-xl font-bold text-amber-400">Admin — Sucursales</h1>
-          <a href="/inicio" className="text-sm text-zinc-400 hover:text-white">← Inicio</a>
+          <div className="flex items-center gap-3">
+            <ThemeToggle />
+            <a href="/inicio" className="text-sm text-zinc-400 hover:text-white">← Inicio</a>
+          </div>
         </div>
       </header>
       <main className="max-w-7xl mx-auto px-6 py-6 grid grid-cols-1 lg:grid-cols-2 gap-6">

@@ -1,4 +1,5 @@
 "use client";
+import ThemeToggle from "@/components/ThemeToggle";
 
 import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
@@ -30,7 +31,7 @@ export default function ReportesPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (!puedeVer) return <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center p-8">Solo GERENTE o superior puede ver reportes</div>;
+  if (!puedeVer) return <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center p-8 text-center">Solo GERENTE o superior puede ver reportes</div>;
   if (loading) return <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center">Cargando...</div>;
 
   return (
@@ -38,7 +39,10 @@ export default function ReportesPage() {
       <header className="border-b border-zinc-800 px-6 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <h1 className="text-xl font-bold text-amber-400">Reportes Diarios</h1>
-          <a href="/inicio" className="text-sm text-zinc-400 hover:text-white">← Inicio</a>
+          <div className="flex items-center gap-3">
+            <ThemeToggle />
+            <a href="/inicio" className="text-sm text-zinc-400 hover:text-white">← Inicio</a>
+          </div>
         </div>
       </header>
       <main className="max-w-7xl mx-auto px-6 py-6">
