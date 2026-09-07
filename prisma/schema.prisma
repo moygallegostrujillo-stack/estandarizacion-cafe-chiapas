@@ -68,12 +68,14 @@ model Usuario {
   passwordHash    String
   rol             String       @default("STAFF") // SUPER_ADMIN, GERENTE, JEFE_AREA, SUPERVISOR, STAFF, RRHH, COMPRAS
   sedeIdActiva    String?
+  areaId          String?
   activo          Boolean      @default(true)
   ultimoAcceso    DateTime?
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
   sede                    Sede?           @relation(fields: [sedeIdActiva], references: [id])
+  area                    Area?           @relation(fields: [areaId], references: [id])
   membresias              EquipoMiembro[]
   checklistsEjecutados    Checklist[]     @relation("ejecutor")
   checklistsVerificados   Checklist[]     @relation("verificador")
@@ -147,6 +149,7 @@ model Area {
   procesos    Proceso[]
   equipos     Equipo[]
   sede        Sede?      @relation(fields: [sedeId], references: [id], onDelete: Cascade)
+  jefes       Usuario[]
 
   @@unique([sedeId, codigo])
   @@index([sedeId])

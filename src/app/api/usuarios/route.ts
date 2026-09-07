@@ -24,18 +24,30 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   if (!isSuperAdmin(user.rol)) return NextResponse.json({ error: "Solo SUPER_ADMIN" }, { status: 403 });
 
-  const [usuarios, sedes] = await Promise.all([
-    prisma.usuario.findMany({
-      orderBy: { createdAt: "desc" },
-      include: { sede: { select: { id: true, nombre: true } } },
-    }),
-    prisma.sede.findMany({ select: { id: true, nombre: true, activo: true }, orderBy: { nombre: "asc" } }),
-  ]);
+  async function fetchAll() {
+    const [usuarios, sedes, areas] = await Promise.all([
+      prisma.usuario.findMany({
+        orderBy: { createdAt: "desc" },
+        include: { sede: { select: { id: true, nombre: true } }, area: { select: { id: true, nombre: true, codigo: true } } } as never,
+      }),
+      prisma.sede.findMany({ select: { id: true, nombre: true, activo: true }, orderBy: { nombre: "asc" } }),
+      prisma.area.findMany({ where: { activo: true }, select: { id: true, nombre: true, codigo: true }, orderBy: { orden: "asc" } }),
+    ]);
+    return { usuarios, sedes, areas };
+  }
 
-  return NextResponse.json({
-    usuarios: usuarios.map(omitPasswordHash),
-    sedes,
-  });
+  try {
+    const { usuarios, sedes, areas } = await fetchAll();
+    return NextResponse.json({ usuarios: usuarios.map(omitPasswordHash), sedes, areas });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes("areaId") || msg.includes("area")) {
+      await prisma.$executeRawUnsafe(`ALTER TABLE "Usuario" ADD COLUMN IF NOT EXISTS "areaId" TEXT REFERENCES "Area"(id) ON DELETE SET NULL; CREATE INDEX IF NOT EXISTS "Usuario_areaId_idx" ON "Usuario"("areaId");`);
+      const { usuarios, sedes, areas } = await fetchAll();
+      return NextResponse.json({ usuarios: usuarios.map(omitPasswordHash), sedes, areas });
+    }
+    throw e;
+  }
 }
 
 // POST /api/usuarios — crear usuario (solo SUPER_ADMIN)
@@ -56,23 +68,50 @@ export async function POST(req: NextRequest) {
     const sede = await prisma.sede.findUnique({ where: { id: data.sedeIdActiva } });
     if (!sede) return NextResponse.json({ error: "Sede no encontrada" }, { status: 400 });
   }
+  // Validar area si se envía (solo para JEFE_AREA)
+  const areaId = (body as Record<string, unknown>).areaId as string | undefined;
+  if (areaId) {
+    const area = await prisma.area.findUnique({ where: { id: areaId } });
+    if (!area) return NextResponse.json({ error: "Área no encontrada" }, { status: 400 });
+  }
 
   const exists = await prisma.usuario.findUnique({ where: { email: data.email } });
   if (exists) return NextResponse.json({ error: "Email ya registrado" }, { status: 409 });
 
   const passwordHash = await bcrypt.hash(data.password, 10);
 
-  const created = await prisma.usuario.create({
-    data: {
-      email: data.email,
-      nombre: data.nombre,
-      apellido: data.apellido || null,
-      telefono: data.telefono || null,
-      rol: data.rol,
-      sedeIdActiva: data.sedeIdActiva || null,
-      passwordHash,
-    },
-  });
+  let created;
+  try {
+    created = await prisma.usuario.create({
+      data: {
+        email: data.email,
+        nombre: data.nombre,
+        apellido: data.apellido || null,
+        telefono: data.telefono || null,
+        rol: data.rol,
+        sedeIdActiva: data.sedeIdActiva || null,
+        areaId: areaId || null,
+        passwordHash,
+      } as never,
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes("areaId")) {
+      await prisma.$executeRawUnsafe(`ALTER TABLE "Usuario" ADD COLUMN IF NOT EXISTS "areaId" TEXT REFERENCES "Area"(id) ON DELETE SET NULL;`);
+      created = await prisma.usuario.create({
+        data: {
+          email: data.email,
+          nombre: data.nombre,
+          apellido: data.apellido || null,
+          telefono: data.telefono || null,
+          rol: data.rol,
+          sedeIdActiva: data.sedeIdActiva || null,
+          areaId: areaId || null,
+          passwordHash,
+        } as never,
+      });
+    } else throw e;
+  }
 
   // AuditLog aditivo — no bloquea si falla
   try {
@@ -100,6 +139,7 @@ const patchSchema = z.object({
   telefono: z.string().nullable().optional(),
   rol: z.enum(["SUPER_ADMIN", "GERENTE", "JEFE_AREA", "SUPERVISOR", "STAFF", "RRHH", "COMPRAS"]).optional(),
   sedeIdActiva: z.string().nullable().optional(),
+  areaId: z.string().nullable().optional(),
   activo: z.boolean().optional(),
   password: z.string().min(8).optional(), // reset
 });
@@ -135,6 +175,10 @@ export async function PATCH(req: NextRequest) {
     const sede = await prisma.sede.findUnique({ where: { id: rest.sedeIdActiva } });
     if (!sede) return NextResponse.json({ error: "Sede no encontrada" }, { status: 400 });
   }
+  if ((rest as Record<string, unknown>).areaId) {
+    const area = await prisma.area.findUnique({ where: { id: (rest as Record<string, unknown>).areaId as string } });
+    if (!area) return NextResponse.json({ error: "Área no encontrada" }, { status: 400 });
+  }
 
   const data: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(rest)) {
@@ -148,7 +192,16 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Sin cambios" }, { status: 400 });
   }
 
-  const updated = await prisma.usuario.update({ where: { id }, data });
+  let updated;
+  try {
+    updated = await prisma.usuario.update({ where: { id }, data } as never);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes("areaId")) {
+      await prisma.$executeRawUnsafe(`ALTER TABLE "Usuario" ADD COLUMN IF NOT EXISTS "areaId" TEXT REFERENCES "Area"(id) ON DELETE SET NULL;`);
+      updated = await prisma.usuario.update({ where: { id }, data } as never);
+    } else throw e;
+  }
 
   try {
     await prisma.auditLog.create({

@@ -13,9 +13,19 @@ export async function GET(req: Request) {
   const estado = searchParams.get("estado");
   const fichaId = searchParams.get("fichaId");
 
+  // JEFE_AREA ve solo su área (si tiene areaId asignada)
+  let areaIdFiltro: string | null = null;
+  if (user.rol === "JEFE_AREA") {
+    try {
+      const u = await prisma.usuario.findUnique({ where: { id: user.id }, select: { areaId: true } as never });
+      areaIdFiltro = (u as unknown as { areaId: string | null })?.areaId || null;
+    } catch {}
+  }
+
   const where: Record<string, unknown> = {};
   if (estado) where.estado = estado;
   if (fichaId) where.fichaId = fichaId;
+  if (areaIdFiltro) where.ficha = { proceso: { areaId: areaIdFiltro } };
 
   const data = await withUserContext(user.id, user.rol as never, user.sedeId, async (tx) => {
     return tx.checklist.findMany({
@@ -58,9 +68,20 @@ export async function POST(req: Request) {
     // Validar ficha existe y turno pertenece a sede
     const ficha = await tx.ficha.findUnique({
       where: { id: fichaId },
-      include: { preguntas: { orderBy: { numero: "asc" } } },
+      include: { preguntas: { orderBy: { numero: "asc" } }, proceso: { include: { area: true } } },
     });
     if (!ficha) throw new Error("Ficha no encontrada");
+
+    // Si es JEFE_AREA con área asignada, solo puede crear de su área
+    if (user.rol === "JEFE_AREA") {
+      try {
+        const u = await prisma.usuario.findUnique({ where: { id: user.id }, select: { areaId: true } as never });
+        const areaId = (u as unknown as { areaId: string | null })?.areaId;
+        if (areaId && ficha.proceso.areaId !== areaId) throw new Error("Solo puedes crear checklists de tu área asignada");
+      } catch (e) {
+        if (e instanceof Error && e.message.includes("Solo puedes crear")) throw e;
+      }
+    }
 
     const turno = await tx.turno.findFirst({ where: { id: turnoId, sedeId: user.sedeId! } });
     if (!turno) throw new Error("Turno no válido para esta sede");

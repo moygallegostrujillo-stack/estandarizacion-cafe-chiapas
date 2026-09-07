@@ -9,9 +9,20 @@ export async function GET() {
   const user = session?.user as unknown as { id: string; rol: string; sedeId: string | null } | null;
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
+  // Si es JEFE_AREA con área asignada, filtra solo su área
+  let areaIdFiltro: string | null = null;
+  if (user.rol === "JEFE_AREA") {
+    try {
+      const u = await prisma.usuario.findUnique({ where: { id: user.id }, select: { areaId: true } as never });
+      areaIdFiltro = (u as unknown as { areaId: string | null })?.areaId || null;
+    } catch {}
+  }
+
   try {
     const data = await withUserContext(user.id, user.rol as never, user.sedeId, async (tx) => {
+      const whereArea = areaIdFiltro ? { proceso: { areaId: areaIdFiltro } } : {};
       const fichas = await tx.ficha.findMany({
+        where: whereArea as never,
         include: {
           proceso: { include: { area: true } },
           preguntas: { orderBy: { numero: "asc" } },

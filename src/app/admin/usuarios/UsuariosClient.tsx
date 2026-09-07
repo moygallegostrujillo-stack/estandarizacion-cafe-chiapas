@@ -15,8 +15,10 @@ type Usuario = {
   telefono: string | null;
   rol: string;
   sedeIdActiva: string | null;
+  areaId: string | null;
   activo: boolean;
   sede: { id: string; nombre: string } | null;
+  area: { id: string; nombre: string; codigo: string } | null;
   createdAt: string;
 };
 
@@ -25,14 +27,15 @@ const ROLES = ["SUPER_ADMIN", "GERENTE", "JEFE_AREA", "SUPERVISOR", "STAFF", "RR
 export default function UsuariosClient() {
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [sedes, setSedes] = useState<Sede[]>([]);
+  const [areas, setAreas] = useState<{ id: string; nombre: string; codigo: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<Usuario | null>(null);
 
   // Form states
-  const [form, setForm] = useState({ email: "", nombre: "", apellido: "", telefono: "", rol: "STAFF", sedeIdActiva: "", password: "" });
-  const [editForm, setEditForm] = useState({ nombre: "", apellido: "", telefono: "", rol: "STAFF", sedeIdActiva: "", activo: true, password: "" });
+  const [form, setForm] = useState({ email: "", nombre: "", apellido: "", telefono: "", rol: "STAFF", sedeIdActiva: "", areaId: "", password: "" });
+  const [editForm, setEditForm] = useState({ nombre: "", apellido: "", telefono: "", rol: "STAFF", sedeIdActiva: "", areaId: "", activo: true, password: "" });
 
   async function load() {
     setLoading(true);
@@ -45,6 +48,7 @@ export default function UsuariosClient() {
     const data = await res.json();
     setUsuarios(data.usuarios);
     setSedes(data.sedes);
+    if (data.areas) setAreas(data.areas);
     setLoading(false);
   }
 
@@ -58,6 +62,7 @@ export default function UsuariosClient() {
         telefono: editing.telefono || "",
         rol: editing.rol,
         sedeIdActiva: editing.sedeIdActiva || "",
+        areaId: (editing as unknown as { areaId: string | null }).areaId || "",
         activo: editing.activo,
         password: "",
       });
@@ -76,11 +81,12 @@ export default function UsuariosClient() {
     if (form.apellido) body.apellido = form.apellido;
     if (form.telefono) body.telefono = form.telefono;
     if (form.sedeIdActiva) body.sedeIdActiva = form.sedeIdActiva;
+    if (form.areaId && form.rol === "JEFE_AREA") body.areaId = form.areaId;
 
     const res = await fetch("/api/usuarios", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     if (!res.ok) { setMsg((await res.json()).error); return; }
     setMsg("Usuario creado");
-    setForm({ email: "", nombre: "", apellido: "", telefono: "", rol: "STAFF", sedeIdActiva: "", password: "" });
+    setForm({ email: "", nombre: "", apellido: "", telefono: "", rol: "STAFF", sedeIdActiva: "", areaId: "", password: "" });
     setShowCreate(false);
     load();
   }
@@ -95,6 +101,7 @@ export default function UsuariosClient() {
     if ((editForm.telefono || null) !== editing.telefono) body.telefono = editForm.telefono || null;
     if (editForm.rol !== editing.rol) body.rol = editForm.rol;
     if ((editForm.sedeIdActiva || null) !== editing.sedeIdActiva) body.sedeIdActiva = editForm.sedeIdActiva || null;
+    if ((editForm.areaId || null) !== ((editing as unknown as { areaId: string | null }).areaId || null)) body.areaId = editForm.areaId || null;
     if (editForm.activo !== editing.activo) body.activo = editForm.activo;
     if (editForm.password) body.password = editForm.password;
 
@@ -139,7 +146,13 @@ export default function UsuariosClient() {
             <option value="">Sin sede</option>
             {sedes.filter(s => s.activo).map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
           </select>
-          <input required type="password" placeholder="Contraseña inicial (min 8) *" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} className="border rounded px-3 py-2 text-sm md:col-span-2" />
+          {form.rol === "JEFE_AREA" && (
+            <select value={form.areaId} onChange={e => setForm({ ...form, areaId: e.target.value })} className="border rounded px-3 py-2 text-sm">
+              <option value="">Área a cargo *</option>
+              {areas.map((a) => <option key={a.id} value={a.id}>{a.codigo} — {a.nombre}</option>)}
+            </select>
+          )}
+          <input required type="password" placeholder="Contraseña inicial (min 8) *" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} className={`border rounded px-3 py-2 text-sm ${form.rol === "JEFE_AREA" ? "" : "md:col-span-2"}`} />
           <button type="submit" className="md:col-span-2 bg-orange-600 text-white py-2 rounded text-sm hover:bg-orange-700">Crear usuario</button>
         </form>
       )}
@@ -152,6 +165,7 @@ export default function UsuariosClient() {
                 <th className="px-3 py-2 font-medium">Usuario</th>
                 <th className="px-3 py-2 font-medium">Rol</th>
                 <th className="px-3 py-2 font-medium">Sede</th>
+                <th className="px-3 py-2 font-medium">Área</th>
                 <th className="px-3 py-2 font-medium">Estado</th>
                 <th className="px-3 py-2 font-medium text-right">Acciones</th>
               </tr>
@@ -165,6 +179,7 @@ export default function UsuariosClient() {
                   </td>
                   <td className="px-3 py-2"><span className="bg-gray-100 border px-2 py-0.5 rounded text-xs">{u.rol}</span></td>
                   <td className="px-3 py-2 text-xs">{u.sede?.nombre || <span className="text-gray-400">Sin sede</span>}</td>
+                  <td className="px-3 py-2 text-xs">{u.area ? `${u.area.codigo}` : <span className="text-gray-400">—</span>}</td>
                   <td className="px-3 py-2"><span className={`text-xs px-2 py-0.5 rounded border ${u.activo ? "bg-green-50 border-green-200 text-green-700" : "bg-red-50 border-red-200 text-red-700"}`}>{u.activo ? "Activo" : "Inactivo"}</span></td>
                   <td className="px-3 py-2 text-right space-x-1">
                     <button onClick={() => setEditing(u)} className="text-xs border px-2 py-1 rounded hover:bg-white">Editar</button>
@@ -172,7 +187,7 @@ export default function UsuariosClient() {
                   </td>
                 </tr>
               ))}
-              {usuarios.length === 0 && <tr><td colSpan={5} className="text-center py-8 text-gray-400">Sin usuarios</td></tr>}
+              {usuarios.length === 0 && <tr><td colSpan={6} className="text-center py-8 text-gray-400">Sin usuarios</td></tr>}
             </tbody>
           </table>
         </div>
@@ -196,6 +211,12 @@ export default function UsuariosClient() {
                 {sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}{!s.activo ? " (inactiva)" : ""}</option>)}
               </select>
             </div>
+            {editForm.rol === "JEFE_AREA" && (
+              <select value={editForm.areaId} onChange={e => setEditForm({ ...editForm, areaId: e.target.value })} className="border rounded px-3 py-2 text-sm">
+                <option value="">Área a cargo</option>
+                {areas.map((a) => <option key={a.id} value={a.id}>{a.codigo} — {a.nombre}</option>)}
+              </select>
+            )}
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={editForm.activo} onChange={e => setEditForm({ ...editForm, activo: e.target.checked })} /> Activo</label>
             <input type="password" value={editForm.password} onChange={e => setEditForm({ ...editForm, password: e.target.value })} placeholder="Nueva contraseña (dejar vacío para no cambiar, min 8)" className="w-full border rounded px-3 py-2 text-sm" />
             <div className="flex gap-2 pt-2">
