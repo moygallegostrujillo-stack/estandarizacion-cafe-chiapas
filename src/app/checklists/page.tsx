@@ -45,14 +45,14 @@ export default function ChecklistsPage() {
   const [fichasVisibles, setFichasVisibles] = useState<Set<string> | null>(null);
 
   async function loadChecklists() {
-    const res = await fetch("/api/checklists");
+    const res = await fetch("/api/checklists?hoy=1");
     if (res.ok) setChecklists(await res.json());
   }
 
   useEffect(() => {
     if (!user) return;
     Promise.all([
-      fetch("/api/checklists").then((r) => r.json()).then(setChecklists),
+      fetch("/api/checklists?hoy=1").then((r) => r.json()).then(setChecklists),
       fetch("/api/procesos").then((r) => r.json()).then(setAreas),
       fetch("/api/turnos").then((r) => r.json()).then(setTurnos).catch(() => setTurnos([])),
       fetch("/api/fichas")
@@ -246,6 +246,7 @@ export default function ChecklistsPage() {
           </div>
           <div className="flex items-center gap-3">
             <ThemeToggle />
+            <a href="/historial" className="text-sm text-amber-400 hover:text-amber-300">Historial →</a>
             <a href="/inicio" className="text-sm text-zinc-400 hover:text-white">← Inicio</a>
           </div>
         </div>

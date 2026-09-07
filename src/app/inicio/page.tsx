@@ -75,7 +75,10 @@ export default async function InicioPage() {
             <h3 className="font-semibold text-gray-900 mb-4">Accesos rápidos</h3>
             <div className="space-y-2">
               <Link href="/checklists" className="block text-orange-600 hover:underline">
-                → Ver y ejecutar checklists
+                → Ver y ejecutar checklists (hoy)
+              </Link>
+              <Link href="/historial" className="block text-orange-600 hover:underline">
+                → Historial por turno y por área
               </Link>
               <Link href="/incidencias" className="block text-orange-600 hover:underline">
                 → Reportar incidencia

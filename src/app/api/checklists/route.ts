@@ -12,10 +12,15 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const estado = searchParams.get("estado");
   const fichaId = searchParams.get("fichaId");
+  const areaId = searchParams.get("areaId");
+  const turnoId = searchParams.get("turnoId");
+  const desde = searchParams.get("desde");
+  const hasta = searchParams.get("hasta");
+  const hoy = searchParams.get("hoy");
 
   // JEFE_AREA ve solo su área (si tiene areaId asignada)
-  let areaIdFiltro: string | null = null;
-  if (user.rol === "JEFE_AREA") {
+  let areaIdFiltro: string | null = areaId || null;
+  if (!areaIdFiltro && user.rol === "JEFE_AREA") {
     try {
       const u = await prisma.usuario.findUnique({ where: { id: user.id }, select: { areaId: true } as never });
       areaIdFiltro = (u as unknown as { areaId: string | null })?.areaId || null;
@@ -25,7 +30,18 @@ export async function GET(req: Request) {
   const where: Record<string, unknown> = {};
   if (estado) where.estado = estado;
   if (fichaId) where.fichaId = fichaId;
+  if (turnoId) where.turnoId = turnoId;
   if (areaIdFiltro) where.ficha = { proceso: { areaId: areaIdFiltro } };
+  // Filtro fecha: hoy = solo hoy 00:00, o rango desde/hasta
+  if (hoy === "1") {
+    const gte = new Date(new Date().setHours(0, 0, 0, 0));
+    where.fecha = { gte };
+  } else if (desde || hasta) {
+    const f: Record<string, Date> = {};
+    if (desde) f.gte = new Date(desde + "T00:00:00");
+    if (hasta) f.lte = new Date(hasta + "T23:59:59");
+    where.fecha = f;
+  }
 
   const data = await withUserContext(user.id, user.rol as never, user.sedeId, async (tx) => {
     return tx.checklist.findMany({
