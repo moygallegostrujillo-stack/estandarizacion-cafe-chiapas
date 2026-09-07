@@ -111,7 +111,16 @@ export default function ChecklistsPage() {
       nota = prompt("Motivo no cumple (breve, ej. Sin plumones, refri 8°C):") || "";
       if (!nota.trim()) return;
     }
-    const body = status === "CUMPLE" ? { id: itemId, completado: true, valor: "CUMPLE", nota: null } : { id: itemId, completado: false, valor: "NO_CUMPLE", nota };
+    const isCumple = status === "CUMPLE";
+    // Optimistic: pinta al instante
+    const prevSelected = selected;
+    const optimisticItems = selected.items.map((it) =>
+      it.id === itemId ? { ...it, completado: isCumple, valor: status, nota: (nota as unknown as string) ?? it.valor } as typeof it : it
+    );
+    setSelected({ ...selected, items: optimisticItems });
+    setChecklists((prev) => prev.map((c) => (c.id === selected.id ? { ...c, items: optimisticItems } : c)));
+
+    const body = isCumple ? { id: itemId, completado: true, valor: "CUMPLE", nota: null } : { id: itemId, completado: false, valor: "NO_CUMPLE", nota };
     const res = await fetch(`/api/checklists/${selected.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -120,14 +129,13 @@ export default function ChecklistsPage() {
     if (!res.ok) {
       const d = await res.json().catch(() => ({ error: "Error guardando" }));
       alert(d.error || "No se pudo guardar");
+      setSelected(prevSelected);
+      setChecklists((prev) => prev.map((c) => (c.id === prevSelected.id ? prevSelected : c)));
       return;
     }
-    const r = await fetch(`/api/checklists/${selected.id}`);
-    if (r.ok) {
-      const fresh = await r.json();
-      setSelected(fresh);
-      setChecklists((prev) => prev.map((c) => (c.id === fresh.id ? { ...c, items: fresh.items, estado: fresh.estado } : c)));
-    }
+    const fresh = await res.json();
+    setSelected(fresh);
+    setChecklists((prev) => prev.map((c) => (c.id === fresh.id ? fresh : c)));
   }
 
   // Mantener toggleItem para compatibilidad pero delega a CUMPLE

@@ -136,16 +136,44 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
     if (typeof body.notas === "string") data.notas = body.notas;
 
+    // Siempre retornar checklist completo con evidencias+signedUrl (evita segundo GET en cliente)
     if (Object.keys(data).length === 0) {
-      return tx.checklist.findUnique({ where: { id }, include: { items: true } });
+      const full = await tx.checklist.findUnique({
+        where: { id },
+        include: {
+          ficha: { include: { proceso: { include: { area: true } }, preguntas: { orderBy: { numero: "asc" } } } },
+          turno: true,
+          items: { include: { evidencias: true }, orderBy: { orden: "asc" } },
+          ejecutor: { select: { nombre: true, email: true } },
+          verificador: { select: { nombre: true } },
+        },
+      });
+      return full;
     }
 
     return tx.checklist.update({
       where: { id },
       data: data as never,
-      include: { items: { include: { evidencias: true } }, ficha: { include: { proceso: { include: { area: true } } } }, turno: true, ejecutor: { select: { nombre: true, email: true } }, verificador: { select: { nombre: true } } },
+      include: {
+        ficha: { include: { proceso: { include: { area: true } }, preguntas: { orderBy: { numero: "asc" } } } },
+        turno: true,
+        items: { include: { evidencias: true }, orderBy: { orden: "asc" } },
+        ejecutor: { select: { nombre: true, email: true } },
+        verificador: { select: { nombre: true } },
+      },
     });
     });
+    // Añade signedUrl para fotos privadas (mismo que GET) — evita que cliente haga segundo fetch
+    if (updated) {
+      try {
+        const { getSignedUrl } = await import("@/lib/storage");
+        for (const it of (updated as unknown as { items: { evidencias: { url: string; signedUrl?: string }[] }[] }).items) {
+          for (const ev of it.evidencias) {
+            try { ev.signedUrl = await getSignedUrl(ev.url, 3600); } catch {}
+          }
+        }
+      } catch {}
+    }
     return NextResponse.json(updated);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error actualizando checklist";
