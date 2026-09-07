@@ -41,6 +41,7 @@ export default function ChecklistsPage() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [fichasOcultas, setFichasOcultas] = useState<Set<string>>(new Set());
 
   async function loadChecklists() {
     const res = await fetch("/api/checklists");
@@ -53,6 +54,13 @@ export default function ChecklistsPage() {
       fetch("/api/checklists").then((r) => r.json()).then(setChecklists),
       fetch("/api/procesos").then((r) => r.json()).then(setAreas),
       fetch("/api/turnos").then((r) => r.json()).then(setTurnos).catch(() => setTurnos([])),
+      fetch("/api/fichas")
+        .then((r) => (r.ok ? r.json() : []))
+        .then((fichas: { id: string; activoEfectivo: boolean }[]) => {
+          const ocultas = new Set(fichas.filter((f) => !f.activoEfectivo).map((f) => f.id));
+          setFichasOcultas(ocultas);
+        })
+        .catch(() => {}),
     ]).finally(() => setLoading(false));
   }, [user]);
 
@@ -244,8 +252,17 @@ export default function ChecklistsPage() {
             <div className="space-y-3">
               <select value={fichaId} onChange={(e) => setFichaId(e.target.value)} className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm">
                 <option value="">Ficha (54 procesos)</option>
-                {areas.flatMap((a) => a.procesos.map((p) => <option key={p.fichas[0]?.id} value={p.fichas[0]?.id}>{p.codigo} — {p.nombre}</option>))}
+                {areas.flatMap((a) =>
+                  a.procesos
+                    .filter((p) => !fichasOcultas.has(p.fichas[0]?.id))
+                    .map((p) => <option key={p.fichas[0]?.id} value={p.fichas[0]?.id}>{p.codigo} — {p.nombre}</option>)
+                )}
               </select>
+              {fichasOcultas.size > 0 && (
+                <p className="text-xs text-zinc-500">
+                  {fichasOcultas.size} fichas ocultas en tu sede — <a href="/fichas" className="text-amber-400 hover:underline">gestionar en /fichas</a>
+                </p>
+              )}
               <select value={turnoId} onChange={(e) => setTurnoId(e.target.value)} className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm">
                 <option value="">Turno</option>
                 {turnos.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
