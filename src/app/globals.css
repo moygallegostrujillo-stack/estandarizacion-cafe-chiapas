@@ -36,3 +36,13 @@ html:not(.light) .border { border-color: #27272a !important; }
 html:not(.light) .bg-white h3 { color: #fafafa !important; }
 html:not(.light) .bg-white dd { color: #e4e4e7 !important; }
 html:not(.light) .bg-white dt { color: #a1a1aa !important; }
+/* Fix contraste Empleados/Usuarios + Fichas en oscuro */
+html:not(.light) input,
+html:not(.light) select,
+html:not(.light) textarea { background-color: #27272a !important; border-color: #3f3f46 !important; color: #fafafa !important; }
+html:not(.light) input::placeholder,
+html:not(.light) textarea::placeholder { color: #71717a !important; }
+html:not(.light) table thead { background-color: #27272a !important; }
+html:not(.light) table th { color: #a1a1aa !important; }
+html:not(.light) table td { color: #e4e4e7 !important; }
+html:not(.light) .bg-gray-100 { background-color: #27272a !important; }
