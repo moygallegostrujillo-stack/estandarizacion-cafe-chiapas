@@ -42,6 +42,7 @@ export default function ChecklistsPage() {
   const [creating, setCreating] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [fichasOcultas, setFichasOcultas] = useState<Set<string>>(new Set());
+  const [fichasVisibles, setFichasVisibles] = useState<Set<string> | null>(null);
 
   async function loadChecklists() {
     const res = await fetch("/api/checklists");
@@ -59,6 +60,12 @@ export default function ChecklistsPage() {
         .then((fichas: { id: string; activoEfectivo: boolean }[]) => {
           const ocultas = new Set(fichas.filter((f) => !f.activoEfectivo).map((f) => f.id));
           setFichasOcultas(ocultas);
+          // Si el API filtra por área (JEFE_AREA), fichas.length será 7 (BAR) vs 54 global
+          if (fichas.length > 0 && fichas.length < 30) {
+            setFichasVisibles(new Set(fichas.map((f) => f.id)));
+          } else {
+            setFichasVisibles(null);
+          }
         })
         .catch(() => {}),
     ]).finally(() => setLoading(false));
@@ -251,10 +258,15 @@ export default function ChecklistsPage() {
             <h3 className="font-semibold mb-3">Nuevo checklist {puedeEditarDemo ? <span className="text-xs font-normal text-amber-400">(editable demo)</span> : null}</h3>
             <div className="space-y-3">
               <select value={fichaId} onChange={(e) => setFichaId(e.target.value)} className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm">
-                <option value="">Ficha (54 procesos)</option>
+                <option value="">{fichasVisibles ? `Ficha (${fichasVisibles.size} procesos)` : "Ficha (54 procesos)"}</option>
                 {areas.flatMap((a) =>
                   a.procesos
-                    .filter((p) => !fichasOcultas.has(p.fichas[0]?.id))
+                    .filter((p) => {
+                      const fid = p.fichas[0]?.id;
+                      if (!fid) return false;
+                      if (fichasVisibles && !fichasVisibles.has(fid)) return false;
+                      return !fichasOcultas.has(fid);
+                    })
                     .map((p) => <option key={p.fichas[0]?.id} value={p.fichas[0]?.id}>{p.codigo} — {p.nombre}</option>)
                 )}
               </select>
