@@ -79,21 +79,28 @@ export default function ChecklistsPage() {
     // Intenta template medible por código (ej. BAR-01), si no existe usa las 7 preguntas como fallback
     import("@/lib/checklist-templates").then(({ getChecklistTemplate }) => {
       const tpl = getChecklistTemplate(proceso.codigo);
+      let base: DraftItem[] = [];
       if (tpl) {
-        setDraftItems(tpl.map((t) => ({ descripcion: t.descripcion, evidenciaRequerida: t.evidenciaRequerida, tipo: t.evidenciaRequerida ? "FOTO" : "BOOLEAN" })));
+        base = tpl.map((t) => ({ descripcion: t.descripcion, evidenciaRequerida: t.evidenciaRequerida, tipo: t.evidenciaRequerida ? "FOTO" : "BOOLEAN" }));
       } else {
         const ficha = proceso.fichas[0] as unknown as { preguntas?: { numero: number; pregunta: string; respuesta: string }[] };
         if (ficha?.preguntas?.length) {
-          setDraftItems(
-            ficha.preguntas.slice(0, 7).map((p) => ({
-              descripcion: `${p.numero}. ${p.pregunta}: ${p.respuesta.slice(0, 90)}`,
-              evidenciaRequerida: p.numero === 5,
-              tipo: p.numero === 5 ? "FOTO" : "BOOLEAN",
-            }))
-          );
+          base = ficha.preguntas.slice(0, 7).map((p) => ({
+            descripcion: `${p.numero}. ${p.pregunta}: ${p.respuesta.slice(0, 90)}`,
+            evidenciaRequerida: p.numero === 5,
+            tipo: p.numero === 5 ? "FOTO" : "BOOLEAN",
+          }));
         } else {
-          setDraftItems([{ descripcion: "", evidenciaRequerida: false, tipo: "BOOLEAN" }]);
+          base = [{ descripcion: "", evidenciaRequerida: false, tipo: "BOOLEAN" }];
         }
+      }
+      // Para JEFE_AREA, el último item siempre es revisar al operativo (cascada 1:1)
+      if (["JEFE_AREA", "SUPERVISOR"].includes(rol) && base.length < 7) {
+        base.push({ descripcion: "Revisar checklist operativo de mi área — verificar que el staff completó sin incidencias", evidenciaRequerida: false, tipo: "BOOLEAN" });
+      } else if (["JEFE_AREA", "SUPERVISOR"].includes(rol) && base.length === 7) {
+        base[6] = { descripcion: "Revisar checklist operativo de mi área — verificar que el staff completó sin incidencias", evidenciaRequerida: false, tipo: "BOOLEAN" };
+      }
+      setDraftItems(base);
       }
     });
   }, [fichaId, areas]);

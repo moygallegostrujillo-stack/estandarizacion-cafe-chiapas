@@ -30,6 +30,27 @@ export default async function InicioPage() {
       ]);
   const data = { checklistsHoy, incidenciasAbiertas, fichasActivas };
 
+  // Semáforo por área para GERENTE/SUPER_ADMIN (Julie/Erika/Fredy/Manolo) — verde/amarillo/rojo del día
+  let semaforo: { id: string; codigo: string; nombre: string; icono: string | null; color: string | null; estado: "verde" | "amarillo" | "rojo" | "pendiente"; total: number; verificados: number }[] = [];
+  if (user.sedeId && ["GERENTE", "SUPER_ADMIN"].includes(user.rol)) {
+    const areas = await prisma.area.findMany({ where: { sedeId: user.sedeId, activo: true }, orderBy: { orden: "asc" } });
+    semaforo = await Promise.all(
+      areas.map(async (area) => {
+        const checks = await prisma.checklist.findMany({
+          where: { sedeId: user.sedeId!, fecha: { gte: gteHoy }, ficha: { proceso: { areaId: area.id } } },
+          include: { incidencias: true, items: { select: { valor: true } } },
+        });
+        const total = checks.length;
+        if (total === 0) return { id: area.id, codigo: area.codigo, nombre: area.nombre, icono: area.icono, color: area.color, estado: "rojo" as const, total, verificados: 0 };
+        const conIncidencia = checks.some((c) => c.incidencias.length > 0 || c.items.some((i) => i.valor === "NO_CUMPLE") || c.estado === "RECHAZADO");
+        if (conIncidencia) return { id: area.id, codigo: area.codigo, nombre: area.nombre, icono: area.icono, color: area.color, estado: "amarillo" as const, total, verificados: checks.filter((c) => c.estado === "VERIFICADO").length };
+        const todosVerificados = checks.every((c) => c.estado === "VERIFICADO");
+        if (todosVerificados) return { id: area.id, codigo: area.codigo, nombre: area.nombre, icono: area.icono, color: area.color, estado: "verde" as const, total, verificados: total };
+        return { id: area.id, codigo: area.codigo, nombre: area.nombre, icono: area.icono, color: area.color, estado: "pendiente" as const, total, verificados: checks.filter((c) => c.estado === "VERIFICADO").length };
+      })
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -69,6 +90,37 @@ export default async function InicioPage() {
             color="blue"
           />
         </div>
+
+        {semaforo.length > 0 && (
+          <div className="mt-8">
+            <h3 className="font-semibold text-gray-900 mb-3">Termómetro del día — por área {user.sedeId && `(${semaforo.length} áreas)`}</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {semaforo.map((s) => (
+                <Link
+                  key={s.id}
+                  href={`/historial?areaId=${s.id}`}
+                  className={`rounded-lg border p-4 flex items-center gap-3 hover:shadow-md transition ${
+                    s.estado === "verde"
+                      ? "bg-green-50 border-green-200"
+                      : s.estado === "amarillo"
+                        ? "bg-amber-50 border-amber-200"
+                        : s.estado === "rojo"
+                          ? "bg-red-50 border-red-200"
+                          : "bg-blue-50 border-blue-200"
+                  }`}
+                >
+                  <span className="text-2xl">{s.icono || "•"}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{s.codigo} — {s.nombre}</p>
+                    <p className="text-xs text-gray-600">{s.total === 0 ? "Sin checklist hoy" : `${s.verificados}/${s.total} verificados`}</p>
+                  </div>
+                  <span className={`w-3 h-3 rounded-full shrink-0 ${s.estado === "verde" ? "bg-green-500" : s.estado === "amarillo" ? "bg-amber-400" : s.estado === "rojo" ? "bg-red-500" : "bg-blue-400"}`} title={s.estado} />
+                </Link>
+              ))}
+            </div>
+            <p className="text-xs text-gray-500 mt-2">🟢 Verde: todo verificado sin incidencia · 🟡 Amarillo: con incidencia/rechazo · 🔴 Rojo: no se hizo hoy · 🔵 Pendiente de verificación</p>
+          </div>
+        )}
 
         <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white rounded-lg shadow p-6">
