@@ -9,67 +9,59 @@ const prisma = new PrismaClient({ adapter });
 async function main() {
   console.log("🌱 Seeding Cafe DeChiapas (v2.1 - 21 tablas)...");
 
-  const sede = await prisma.sede.upsert({
-    where: { id: "demo-sede-001" },
-    update: {},
-    create: {
-      id: "demo-sede-001",
-      nombre: "Cafe DeChiapas - Sede Piloto",
-      direccion: "Av. Principal 123, Tuxtla Gutierrez, Chiapas",
-      telefono: "+52 961 123 4567",
-      activo: true,
-    },
-  });
-  console.log("✓ Sede:", sede.nombre);
-
-  // ConfigSede - upsert manual (no unique id predictable)
-  const existingConfig = await prisma.configSede.findUnique({ where: { sedeId: sede.id } });
-  if (!existingConfig) {
-    await prisma.configSede.create({
-      data: {
-        sedeId: sede.id,
-        idioma: "es",
-        zonaHoraria: "America/Mexico_City",
-        moneda: "MXN",
-        requiereFotoEvidencia: true,
-        maxMinutosVerificacion: 60,
-      },
-    });
-    console.log("✓ ConfigSede creada");
-  } else {
-    console.log("✓ ConfigSede ya existe");
+  // 3 sedes reales: Poliforum, Cabeza Maya, Hospital (cocina)
+  const sedesData = [
+    { id: "demo-sede-001", nombre: "Cafe DeChiapas - Sede Piloto", direccion: "Av. Principal 123, Tuxtla Gutierrez, Chiapas", telefono: "+52 961 123 4567" },
+    { id: "sede-poliforum", nombre: "Cafe DeChiapas - Poliforum", direccion: "Poliforum, Tuxtla", telefono: "+52 961 123 4567" },
+    { id: "sede-cabeza-maya", nombre: "Cafe DeChiapas - Cabeza Maya", direccion: "Cabeza Maya, Tuxtla", telefono: "+52 961 123 4568" },
+    { id: "sede-hospital", nombre: "Cafe DeChiapas - Hospital", direccion: "Hospital, Tuxtla", telefono: "+52 961 123 4569" },
+  ];
+  const sedes: typeof sedesData = [];
+  for (const sd of sedesData) {
+    const s = await prisma.sede.upsert({ where: { id: sd.id }, update: {}, create: { id: sd.id, nombre: sd.nombre, direccion: sd.direccion, telefono: sd.telefono, activo: true } });
+    sedes.push(s as never);
+    const cfg = await prisma.configSede.findUnique({ where: { sedeId: s.id } });
+    if (!cfg) await prisma.configSede.create({ data: { sedeId: s.id, idioma: "es", zonaHoraria: "America/Mexico_City", moneda: "MXN", requiereFotoEvidencia: true, maxMinutosVerificacion: 60 } });
+    const tc = await prisma.turno.count({ where: { sedeId: s.id } });
+    if (tc === 0) {
+      for (const t of [{ nombre: "Matutino", horaInicio: "06:00", horaFin: "14:00", orden: 1 }, { nombre: "Vespertino", horaInicio: "14:00", horaFin: "22:00", orden: 2 }, { nombre: "Nocturno", horaInicio: "22:00", horaFin: "06:00", orden: 3 }]) {
+        await prisma.turno.create({ data: { ...t, sedeId: s.id } });
+      }
+    }
   }
+  console.log("✓ Sedes:", sedes.map((s) => s.nombre).join(", "));
+  const sede = sedes[0]!; // compatibilidad resto del seed
 
-  // Turnos
-  const turnosExistentes = await prisma.turno.count({ where: { sedeId: sede.id } });
-  if (turnosExistentes === 0) {
-    const turnos = [
-      { nombre: "Matutino", horaInicio: "06:00", horaFin: "14:00", orden: 1 },
-      { nombre: "Vespertino", horaInicio: "14:00", horaFin: "22:00", orden: 2 },
-      { nombre: "Nocturno", horaInicio: "22:00", horaFin: "06:00", orden: 3 },
-    ];
-    for (const t of turnos) await prisma.turno.create({ data: { ...t, sedeId: sede.id } });
-    console.log("✓ Turnos: 3");
-  } else {
-    console.log("✓ Turnos ya existen:", turnosExistentes);
-  }
-
-  // Usuario admin (SUPER_ADMIN con rol en Usuario, no en EquipoMiembro)
+  // Usuarios: admin + Julie/Erika/Fredy/Manolo + barra demo
   const passwordHash = await bcrypt.hash("admin123", 12);
   const admin = await prisma.usuario.upsert({
     where: { email: "admin@cafe.com" },
     update: {},
-    create: {
-      email: "admin@cafe.com",
-      nombre: "Administrador",
-      apellido: "Sistema",
-      passwordHash,
-      rol: "SUPER_ADMIN",
-      sedeIdActiva: sede.id,
-      activo: true,
-    },
+    create: { email: "admin@cafe.com", nombre: "Administrador", apellido: "Sistema", passwordHash, rol: "SUPER_ADMIN", sedeIdActiva: sedes.find((s) => s.id === "sede-poliforum")!.id, activo: true },
   });
   console.log("✓ Usuario admin:", admin.email, `(${admin.rol})`);
+  const sedePoliforum = sedes.find((s) => s.id === "sede-poliforum")!;
+  const sedeCabeza = sedes.find((s) => s.id === "sede-cabeza-maya")!;
+  for (const u of [
+    { email: "julie@cafe.com", nombre: "Julie", rol: "GERENTE", sedeId: sedePoliforum.id, pass: "julie1234" },
+    { email: "erika@cafe.com", nombre: "Erika", rol: "GERENTE", sedeId: sedeCabeza.id, pass: "erika1234" },
+    { email: "fredy@cafe.com", nombre: "Fredy", rol: "SUPER_ADMIN", sedeId: sedePoliforum.id, pass: "fredy1234" },
+    { email: "manolo@cafe.com", nombre: "Manolo", rol: "SUPER_ADMIN", sedeId: sedePoliforum.id, pass: "manolo1234" },
+    { email: "barra@cafe.com", nombre: "Jefe Barra", rol: "JEFE_AREA", sedeId: sedePoliforum.id, pass: "barra1234" },
+  ]) {
+    const h = await bcrypt.hash(u.pass, 10);
+    await prisma.usuario.upsert({
+      where: { email: u.email },
+      update: {},
+      create: { email: u.email, nombre: u.nombre, passwordHash: h, rol: u.rol, sedeIdActiva: u.sedeId, activo: true },
+    });
+    console.log("✓ Usuario:", u.email, `(${u.rol} - ${u.sedeId})`);
+  }
+  // Asigna BAR a barra@cafe.com
+  try {
+    const bar = await prisma.area.findFirst({ where: { codigo: "BAR", sedeId: sedePoliforum.id } });
+    if (bar) await prisma.usuario.update({ where: { email: "barra@cafe.com" }, data: { areaId: bar.id } as never });
+  } catch {}
 
   const areas = [
     { c: "BAR", n: "Bar", i: "🍸", col: "#3B82F6", o: 1, procs: [
@@ -145,11 +137,12 @@ async function main() {
   ];
 
   let total = 0;
+  for (const s of sedes) {
   for (const a of areas) {
     const area = await prisma.area.upsert({
-      where: { sedeId_codigo: { sedeId: sede.id, codigo: a.c } },
+      where: { sedeId_codigo: { sedeId: s.id, codigo: a.c } },
       update: {},
-      create: { codigo: a.c, nombre: a.n, icono: a.i, color: a.col, orden: a.o, sedeId: sede.id, tipo: "SISTEMA", activo: true },
+      create: { codigo: a.c, nombre: a.n, icono: a.i, color: a.col, orden: a.o, sedeId: s.id, tipo: "SISTEMA", activo: true },
     });
     for (let i = 0; i < a.procs.length; i++) {
       const p = a.procs[i];
@@ -193,8 +186,9 @@ async function main() {
       }
     }
   }
+  }
 
-  console.log(`✅ Seed completo: 8 areas, ${total} procesos, 1 admin`);
+  console.log(`✅ Seed completo: ${sedes.length} sedes, 8 areas c/u, ${total} procesos`);
   console.log("");
   console.log("Para iniciar sesión:");
   console.log("  Email: admin@cafe.com");
