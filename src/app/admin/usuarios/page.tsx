@@ -5,7 +5,6 @@ import { getCurrentUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import UsuariosClient from "./UsuariosClient";
-import ThemeToggle from "@/components/ThemeToggle";
 import LogoutButton from "@/components/LogoutButton";
 
 export default async function AdminUsuariosPage() {
@@ -23,7 +22,6 @@ export default async function AdminUsuariosPage() {
           </div>
           <div className="flex items-center gap-3">
             <span className="text-sm text-gray-600">{user.nombre} · {user.rol}</span>
-            <ThemeToggle />
             <LogoutButton />
           </div>
         </div>

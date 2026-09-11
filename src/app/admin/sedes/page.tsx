@@ -1,5 +1,4 @@
 "use client";
-import ThemeToggle from "@/components/ThemeToggle";
 
 import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
@@ -84,7 +83,6 @@ export default function SedesAdminPage() {
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <h1 className="text-xl font-bold text-amber-400">Admin — Sucursales</h1>
           <div className="flex items-center gap-3">
-            <ThemeToggle />
             <a href="/inicio" className="text-sm text-zinc-400 hover:text-white">← Inicio</a>
           </div>
         </div>
