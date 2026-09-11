@@ -9,7 +9,7 @@ type Ficha = {
   activo: boolean;
   activoEfectivo: boolean;
   responsablePuesto: string | null;
-  proceso: { codigo: string; nombre: string; area: { nombre: string; codigo: string } };
+  proceso: { codigo: string; nombre: string; area: { nombre: string; codigo: string; sedeId: string | null; sede?: { id: string; nombre: string } | null } };
   preguntas: Pregunta[];
 };
 
@@ -25,6 +25,8 @@ export default function FichasClient({
   rol: string;
 }) {
   const [fichas, setFichas] = useState<Ficha[]>([]);
+  const [sedes, setSedes] = useState<{ id: string; nombre: string }[]>([]);
+  const [sedeFiltro, setSedeFiltro] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
   const [editing, setEditing] = useState<Ficha | null>(null);
@@ -33,9 +35,15 @@ export default function FichasClient({
 
   async function load() {
     setLoading(true);
-    const res = await fetch("/api/fichas");
-    if (res.ok) setFichas(await res.json());
+    const [resFichas, resSedes] = await Promise.all([fetch("/api/fichas"), fetch("/api/usuarios")]);
+    if (resFichas.ok) setFichas(await resFichas.json());
     else setMsg("Error cargando fichas");
+    if (resSedes.ok) {
+      const d = await resSedes.json();
+      if (d.sedes) setSedes(d.sedes);
+      // Por defecto SUPER_ADMIN ve su sede, JEFE ve solo la suya (ya filtrado por API)
+      if (sedeId && !sedeFiltro) setSedeFiltro(sedeId);
+    }
     setLoading(false);
   }
   useEffect(() => { load(); }, []);
@@ -45,12 +53,14 @@ export default function FichasClient({
   }, [editing]);
 
   async function toggleSede(f: Ficha) {
-    if (!sedeId) return alert("Sin sede asignada");
+    // Para SUPER_ADMIN usa la sede de la ficha, para JEFE usa su sede
+    const targetSedeId = rol === "SUPER_ADMIN" ? (f.proceso.area.sedeId || sedeId) : sedeId;
+    if (!targetSedeId) return alert("Sin sede asignada");
     const next = !f.activoEfectivo;
     const res = await fetch("/api/fichas", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: f.id, sedeId, activo: next }),
+      body: JSON.stringify({ id: f.id, sedeId: targetSedeId, activo: next }),
     });
     if (!res.ok) alert((await res.json()).error || "Error");
     else load();
@@ -69,9 +79,11 @@ export default function FichasClient({
     else { setEditing(null); load(); setMsg("Ficha actualizada (v" + (editing.version + 1) + ")"); }
   }
 
-  const filtered = fichas.filter((f) =>
-    !filter ? true : `${f.proceso.codigo} ${f.proceso.nombre} ${f.proceso.area.nombre}`.toLowerCase().includes(filter.toLowerCase())
-  );
+  const filtered = fichas.filter((f) => {
+    if (sedeFiltro && f.proceso.area.sedeId !== sedeFiltro) return false;
+    if (!filter) return true;
+    return `${f.proceso.codigo} ${f.proceso.nombre} ${f.proceso.area.nombre}`.toLowerCase().includes(filter.toLowerCase());
+  });
 
   // Agrupa por área
   const byArea = filtered.reduce((acc, f) => {
@@ -86,8 +98,18 @@ export default function FichasClient({
   return (
     <div className="space-y-4">
       {msg && <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm px-4 py-2 rounded">{msg}</div>}
-      <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filtrar: BAR, COM, apertura..." className="w-full border rounded px-3 py-2 text-sm" />
-      <p className="text-xs text-gray-500">{filtered.length} fichas {filter && `(filtradas)`} — verde = activa en tu sede, gris = desactivada/quita para checklist</p>
+      <div className="flex gap-2">
+        <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filtrar: BAR, COM, apertura..." className="flex-1 border rounded px-3 py-2 text-sm" />
+        {rol === "SUPER_ADMIN" && sedes.length > 0 && (
+          <select value={sedeFiltro} onChange={(e) => setSedeFiltro(e.target.value)} className="border rounded px-3 py-2 text-sm">
+            <option value="">Todas las sedes ({fichas.length})</option>
+            {sedes.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+          </select>
+        )}
+      </div>
+      <p className="text-xs text-gray-500">
+        {filtered.length} fichas {sedeFiltro ? `en ${sedes.find((s) => s.id === sedeFiltro)?.nombre || "sede"}` : ""} {filter && `(filtradas)`} — verde = activa{sedeFiltro ? ` en ${sedes.find((s) => s.id === sedeFiltro)?.nombre || "sede"}` : " en tu sede"}, gris = desactivada
+      </p>
 
       <div className="space-y-6">
         {Object.entries(byArea).map(([area, list]) => (
@@ -97,11 +119,12 @@ export default function FichasClient({
               {list.map((f) => (
                 <div key={f.id} className={`p-3 flex items-start justify-between gap-3 ${!f.activoEfectivo ? "bg-gray-50 opacity-70" : ""}`}>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs font-mono bg-gray-100 border px-1.5 py-0.5 rounded">{f.proceso.codigo}</span>
                       <span className="font-medium text-sm">{f.proceso.nombre}</span>
+                      {rol === "SUPER_ADMIN" && f.proceso.area.sedeId && <span className="text-xs bg-blue-50 border border-blue-200 text-blue-700 px-1.5 py-0.5 rounded">{sedes.find((s) => s.id === f.proceso.area.sedeId)?.nombre || f.proceso.area.sedeId}</span>}
                       <span className={`text-xs px-1.5 py-0.5 rounded border ${f.activoEfectivo ? "bg-green-50 border-green-200 text-green-700" : "bg-zinc-100 border-zinc-300 text-zinc-500"}`}>
-                        {f.activoEfectivo ? "Activa" : "Oculta en tu sede"}
+                        {f.activoEfectivo ? "Activa" : "Oculta"}
                       </span>
                       <span className="text-xs text-gray-400">v{f.version}</span>
                     </div>
@@ -113,9 +136,13 @@ export default function FichasClient({
                     </ul>
                   </div>
                   <div className="flex gap-1 shrink-0">
-                    {canToggleSede && sedeId && (
-                      <button onClick={() => toggleSede(f)} className={`text-xs border px-2 py-1 rounded ${f.activoEfectivo ? "hover:bg-red-50" : "hover:bg-green-50"}`}>
-                        {f.activoEfectivo ? "Quitar de mi sede" : "Reactivar"}
+                    {canToggleSede && (
+                      <button
+                        onClick={() => toggleSede(f)}
+                        title={rol === "SUPER_ADMIN" ? `Afecta a ${sedes.find((s) => s.id === f.proceso.area.sedeId)?.nombre || f.proceso.area.sedeId}` : "Afecta a tu sede"}
+                        className={`text-xs border px-2 py-1 rounded ${f.activoEfectivo ? "hover:bg-red-50" : "hover:bg-green-50"}`}
+                      >
+                        {f.activoEfectivo ? (rol === "SUPER_ADMIN" ? `Quitar de ${sedes.find((s) => s.id === f.proceso.area.sedeId)?.nombre?.split(" - ").pop() || "sede"}` : "Quitar de mi sede") : "Reactivar"}
                       </button>
                     )}
                     {canEditMaster && (
