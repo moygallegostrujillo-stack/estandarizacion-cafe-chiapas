@@ -18,9 +18,9 @@ export async function GET(req: Request) {
   const hasta = searchParams.get("hasta");
   const hoy = searchParams.get("hoy");
 
-  // JEFE_AREA ve solo su área (si tiene areaId asignada)
-  let areaIdFiltro: string | null = areaId || null;
-  if (!areaIdFiltro && user.rol === "JEFE_AREA") {
+  // JEFE_AREA y STAFF con área asignada solo ven su área
+  let areaIdFiltro: string | null = null;
+  if (["JEFE_AREA", "STAFF"].includes(user.rol)) {
     try {
       const u = await prisma.usuario.findUnique({ where: { id: user.id }, select: { areaId: true } as never });
       areaIdFiltro = (u as unknown as { areaId: string | null })?.areaId || null;
@@ -88,8 +88,8 @@ export async function POST(req: Request) {
     });
     if (!ficha) throw new Error("Ficha no encontrada");
 
-    // Si es JEFE_AREA con área asignada, solo puede crear de su área
-    if (user.rol === "JEFE_AREA") {
+    // JEFE_AREA y STAFF con área asignada solo pueden crear de su área
+    if (["JEFE_AREA", "STAFF"].includes(user.rol)) {
       try {
         const u = await prisma.usuario.findUnique({ where: { id: user.id }, select: { areaId: true } as never });
         const areaId = (u as unknown as { areaId: string | null })?.areaId;

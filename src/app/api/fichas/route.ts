@@ -9,9 +9,9 @@ export async function GET() {
   const user = session?.user as unknown as { id: string; rol: string; sedeId: string | null } | null;
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
-  // Si es JEFE_AREA con área asignada, filtra solo su área
+  // JEFE_AREA y STAFF con área asignada solo ven su área
   let areaIdFiltro: string | null = null;
-  if (user.rol === "JEFE_AREA") {
+  if (["JEFE_AREA", "STAFF"].includes(user.rol)) {
     try {
       const u = await prisma.usuario.findUnique({ where: { id: user.id }, select: { areaId: true } as never });
       areaIdFiltro = (u as unknown as { areaId: string | null })?.areaId || null;

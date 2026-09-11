@@ -81,7 +81,7 @@ export default function UsuariosClient() {
     if (form.apellido) body.apellido = form.apellido;
     if (form.telefono) body.telefono = form.telefono;
     if (form.sedeIdActiva) body.sedeIdActiva = form.sedeIdActiva;
-    if (form.areaId && form.rol === "JEFE_AREA") body.areaId = form.areaId;
+    if (form.areaId && (form.rol === "JEFE_AREA" || form.rol === "STAFF")) body.areaId = form.areaId;
 
     const res = await fetch("/api/usuarios", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     if (!res.ok) { setMsg((await res.json()).error); return; }
@@ -146,7 +146,7 @@ export default function UsuariosClient() {
             <option value="">Sin sede</option>
             {sedes.filter(s => s.activo).map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
           </select>
-          {form.rol === "JEFE_AREA" && (
+          {(form.rol === "JEFE_AREA" || form.rol === "STAFF") && (
             <select value={form.areaId} onChange={e => setForm({ ...form, areaId: e.target.value })} className="border rounded px-3 py-2 text-sm">
               <option value="">Área a cargo *</option>
               {areas.map((a) => <option key={a.id} value={a.id}>{a.codigo} — {a.nombre}</option>)}
@@ -211,7 +211,7 @@ export default function UsuariosClient() {
                 {sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}{!s.activo ? " (inactiva)" : ""}</option>)}
               </select>
             </div>
-            {editForm.rol === "JEFE_AREA" && (
+            {(editForm.rol === "JEFE_AREA" || editForm.rol === "STAFF") && (
               <select value={editForm.areaId} onChange={e => setEditForm({ ...editForm, areaId: e.target.value })} className="border rounded px-3 py-2 text-sm">
                 <option value="">Área a cargo</option>
                 {areas.map((a) => <option key={a.id} value={a.id}>{a.codigo} — {a.nombre}</option>)}
