@@ -100,7 +100,6 @@ export default function ChecklistsPage() {
         base[6] = { descripcion: "Revisar checklist operativo de mi área — verificar que el staff completó sin incidencias", evidenciaRequerida: false, tipo: "BOOLEAN" };
       }
       setDraftItems(base);
-      }
     });
   }, [fichaId, areas]);
 
