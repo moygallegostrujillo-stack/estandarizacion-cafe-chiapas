@@ -25,6 +25,12 @@ html.light .text-white { color: #18181b !important; }
 html.light .text-zinc-400 { color: #71717a !important; }
 html.light .text-zinc-500 { color: #71717a !important; }
 html.light .text-zinc-300 { color: #3f3f46 !important; }
+/* Excepción: botones con fondo oscuro mantienen texto claro en modo claro */
+html.light button.bg-gray-900,
+html.light button.bg-orange-600,
+html.light button.bg-amber-600,
+html.light .bg-gray-900.text-white,
+html.light .bg-orange-600.text-white { color: #fafafa !important; }
 
 /* Dark overrides for light pages (inicio, admin/usuarios) cuando NO hay .light */
 html:not(.light) .bg-gray-50 { background-color: #09090b !important; }
@@ -46,3 +52,6 @@ html:not(.light) table thead { background-color: #27272a !important; }
 html:not(.light) table th { color: #a1a1aa !important; }
 html:not(.light) table td { color: #e4e4e7 !important; }
 html:not(.light) .bg-gray-100 { background-color: #27272a !important; }
+/* Botones claros en oscuro */
+html:not(.light) button.border { color: #e4e4e7 !important; border-color: #3f3f46 !important; }
+html:not(.light) button.bg-white { background-color: #27272a !important; color: #fafafa !important; }
