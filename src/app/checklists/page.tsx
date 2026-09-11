@@ -4,7 +4,6 @@ import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 import BotonRojoIncidencia from "@/components/BotonRojoIncidencia";
 import IncidenciasBadge from "@/components/IncidenciasBadge";
-import ThemeToggle from "@/components/ThemeToggle";
 
 type Checklist = {
   id: string;
@@ -252,7 +251,6 @@ export default function ChecklistsPage() {
             <IncidenciasBadge />
           </div>
           <div className="flex items-center gap-3">
-            <ThemeToggle />
             <a href="/historial" className="text-sm text-amber-400 hover:text-amber-300">Historial →</a>
             <a href="/inicio" className="text-sm text-zinc-400 hover:text-white">← Inicio</a>
           </div>

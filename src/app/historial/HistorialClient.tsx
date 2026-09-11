@@ -1,7 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import ThemeToggle from "@/components/ThemeToggle";
 
 type Checklist = {
   id: string;
@@ -56,7 +55,6 @@ export default function HistorialClient({ rol }: { rol: string }) {
           <h1 className="text-lg font-bold">Historial de checklists</h1>
           <span className="text-xs bg-zinc-800 border border-zinc-700 px-2 py-1 rounded">Por turno y por área</span>
         </div>
-        <ThemeToggle />
       </header>
       <main className="max-w-7xl mx-auto px-6 py-6 space-y-4">
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 grid grid-cols-2 md:grid-cols-6 gap-3">

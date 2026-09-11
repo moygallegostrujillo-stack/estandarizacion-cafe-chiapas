@@ -1,6 +1,5 @@
 "use client";
 
-import ThemeToggle from "@/components/ThemeToggle";
 import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 
@@ -103,7 +102,6 @@ export default function ProcesosPage() {
             </nav>
           </div>
           <div className="flex items-center gap-3">
-            <ThemeToggle />
             <span className="text-sm text-zinc-400">{user.name}</span>
           </div>
         </div>

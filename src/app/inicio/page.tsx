@@ -5,7 +5,6 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import ThemeToggle from "@/components/ThemeToggle";
 import LogoutButton from "@/components/LogoutButton";
 
 // Cache 30s para que volver al home sea instantáneo
@@ -61,7 +60,6 @@ export default async function InicioPage() {
             <span className="text-sm text-gray-600">
               {user.nombre} · <span className="font-medium">{user.rol}</span>
             </span>
-            <ThemeToggle />
             <LogoutButton />
           </div>
         </div>
