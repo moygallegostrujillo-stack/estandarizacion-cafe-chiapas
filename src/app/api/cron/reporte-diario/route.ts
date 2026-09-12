@@ -16,5 +16,20 @@ export async function GET(req: Request) {
     await prisma.$executeRaw`SELECT upsert_reporte_diario(${sede.id}::text, ${ayer}::date)`;
   }
 
-  return NextResponse.json({ ok: true, sedes: sedes.length, fecha: ayer.toISOString().slice(0, 10) });
+  // Limpieza fotos 48h (antes era cron aparte, ahora va aquí para no exceder Hobby 1 cron/día)
+  const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
+  const viejas = await prisma.evidencia.findMany({ where: { createdAt: { lt: cutoff } }, select: { id: true, url: true }, take: 200 });
+  let borradas = 0;
+  for (const ev of viejas) {
+    try {
+      const { deleteEvidencia } = await import("@/lib/storage");
+      await deleteEvidencia(ev.url);
+    } catch {}
+    try {
+      await prisma.evidencia.delete({ where: { id: ev.id } });
+      borradas++;
+    } catch {}
+  }
+
+  return NextResponse.json({ ok: true, sedes: sedes.length, fecha: ayer.toISOString().slice(0, 10), fotosBorradas: borradas });
 }

@@ -3,10 +3,6 @@
     {
       "path": "/api/cron/reporte-diario",
       "schedule": "0 6 * * *"
-    },
-    {
-      "path": "/api/cron/limpieza-evidencias",
-      "schedule": "0 3 * * *"
     }
   ]
 }
