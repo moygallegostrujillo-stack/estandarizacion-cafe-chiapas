@@ -99,10 +99,13 @@ export async function POST(req: Request) {
       }
     }
 
-    // Candado: misma ficha + misma sede + mismo turno + mismo día no puede repetirse (ej. 2× BAR-01 Matutino hoy)
-    const inicioDia = new Date(new Date().setHours(0, 0, 0, 0));
+    // Candado: misma ficha + misma sede + mismo turno + mismo día (America/Mexico_City) no puede repetirse
+    const hoyMexico = new Date().toLocaleDateString("en-CA", { timeZone: "America/Mexico_City" });
+    const inicioDia = new Date(hoyMexico + "T06:00:00.000Z");
+    const inicioSiguiente = new Date(new Date(hoyMexico + "T00:00:00").getTime() + 24 * 60 * 60 * 1000);
+    const finDia = new Date(inicioSiguiente.toISOString().slice(0, 10) + "T05:59:59.999Z");
     const yaExiste = await tx.checklist.findFirst({
-      where: { fichaId, sedeId: user.sedeId!, turnoId, fecha: { gte: inicioDia } },
+      where: { fichaId, sedeId: user.sedeId!, turnoId, fecha: { gte: inicioDia, lte: finDia } },
     });
     if (yaExiste) throw new Error(`Ya existe el checklist de ${ficha.proceso.codigo} para este turno hoy`);
 
