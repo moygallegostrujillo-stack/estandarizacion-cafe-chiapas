@@ -147,7 +147,6 @@ model Area {
   procesos    Proceso[]
   equipos     Equipo[]
   sede        Sede?      @relation(fields: [sedeId], references: [id], onDelete: Cascade)
-  jefes       Usuario[]
 
   @@unique([sedeId, codigo])
   @@index([sedeId])
