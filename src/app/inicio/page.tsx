@@ -30,7 +30,7 @@ export default async function InicioPage() {
   const data = { checklistsHoy, incidenciasAbiertas, fichasActivas };
 
   // Semáforo: GERENTE ve por área de su sede, SUPER_ADMIN (Fredy/Manolo) ve por sucursal
-  let semaforo: { id: string; codigo: string; nombre: string; icono: string | null; estado: "verde" | "amarillo" | "rojo" | "pendiente"; total: number; verificados: number }[] = [];
+  let semaforo: { id: string; codigo: string; nombre: string; icono: string | null; estado: "verde" | "amarillo" | "rojo" | "pendiente"; total: number; verificados: number; completadas?: number }[] = [];
   let semaforoTipo: "area" | "sede" = "area";
   if (user.rol === "GERENTE" && user.sedeId) {
     const areas = await prisma.area.findMany({ where: { sedeId: user.sedeId, activo: true }, orderBy: { orden: "asc" } });
@@ -54,17 +54,29 @@ export default async function InicioPage() {
     const sedes = await prisma.sede.findMany({ where: { activo: true }, orderBy: { nombre: "asc" } });
     semaforo = await Promise.all(
       sedes.map(async (sede) => {
+        // Total esperadas = fichas activas de la sede (considera ocultas por sede)
+        const totalFichas = await prisma.ficha.count({
+          where: {
+            activo: true,
+            proceso: { area: { sedeId: sede.id, activo: true } },
+            // Excluye ocultas por sede (FichaSedeConfig activo=false)
+            sedeConfigs: { none: { sedeId: sede.id, activo: false } },
+          },
+        });
         const checks = await prisma.checklist.findMany({
           where: { sedeId: sede.id, fecha: { gte: gteHoy } },
-          include: { incidencias: true, items: { select: { valor: true } }, ficha: { include: { proceso: { include: { area: true } } } } },
+          include: { incidencias: true, items: { select: { valor: true } } },
         });
-        const total = checks.length;
-        if (total === 0) return { id: sede.id, codigo: sede.nombre.split(" - ").pop() || sede.nombre, nombre: sede.nombre, icono: "🏢", estado: "rojo" as const, total, verificados: 0 };
+        const completadas = checks.filter((c) => c.estado === "COMPLETADO" || c.estado === "VERIFICADO").length;
+        const total = totalFichas;
+        const verificados = checks.filter((c) => c.estado === "VERIFICADO").length;
+        if (total === 0) return { id: sede.id, codigo: sede.nombre.split(" - ").pop() || sede.nombre, nombre: sede.nombre, icono: "🏢", estado: "rojo" as const, total, verificados, completadas };
+        if (completadas === 0) return { id: sede.id, codigo: sede.nombre.split(" - ").pop() || sede.nombre, nombre: sede.nombre, icono: "🏢", estado: "rojo" as const, total, verificados, completadas };
         const conIncidencia = checks.some((c) => c.incidencias.length > 0 || c.items.some((i) => i.valor === "NO_CUMPLE") || c.estado === "RECHAZADO");
-        if (conIncidencia) return { id: sede.id, codigo: sede.nombre.split(" - ").pop() || sede.nombre, nombre: sede.nombre, icono: "🏢", estado: "amarillo" as const, total, verificados: checks.filter((c) => c.estado === "VERIFICADO").length };
-        const todosVerificados = checks.length > 0 && checks.every((c) => c.estado === "VERIFICADO");
-        if (todosVerificados) return { id: sede.id, codigo: sede.nombre.split(" - ").pop() || sede.nombre, nombre: sede.nombre, icono: "🏢", estado: "verde" as const, total, verificados: total };
-        return { id: sede.id, codigo: sede.nombre.split(" - ").pop() || sede.nombre, nombre: sede.nombre, icono: "🏢", estado: "pendiente" as const, total, verificados: checks.filter((c) => c.estado === "VERIFICADO").length };
+        if (conIncidencia) return { id: sede.id, codigo: sede.nombre.split(" - ").pop() || sede.nombre, nombre: sede.nombre, icono: "🏢", estado: "amarillo" as const, total, verificados, completadas };
+        if (completadas === total && verificados === total) return { id: sede.id, codigo: sede.nombre.split(" - ").pop() || sede.nombre, nombre: sede.nombre, icono: "🏢", estado: "verde" as const, total, verificados, completadas };
+        if (verificados === completadas && completadas > 0) return { id: sede.id, codigo: sede.nombre.split(" - ").pop() || sede.nombre, nombre: sede.nombre, icono: "🏢", estado: "verde" as const, total, verificados, completadas };
+        return { id: sede.id, codigo: sede.nombre.split(" - ").pop() || sede.nombre, nombre: sede.nombre, icono: "🏢", estado: "pendiente" as const, total, verificados, completadas };
       })
     );
     semaforoTipo = "sede";
@@ -132,7 +144,13 @@ export default async function InicioPage() {
                   <span className="text-2xl">{s.icono || "•"}</span>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{semaforoTipo === "sede" ? s.nombre : `${s.codigo} — ${s.nombre}`}</p>
-                    <p className="text-xs text-gray-600">{s.total === 0 ? "Sin checklist hoy" : `${s.verificados}/${s.total} verificados`}</p>
+                    <p className="text-xs text-gray-600">
+                      {s.total === 0
+                        ? "Sin checklist hoy"
+                        : semaforoTipo === "sede"
+                          ? `${(s as unknown as { completadas: number }).completadas || s.verificados}/${s.total} (${Math.round(((s as unknown as { completadas: number }).completadas || s.verificados) / s.total * 100)}%)`
+                          : `${s.verificados}/${s.total} verificados`}
+                    </p>
                   </div>
                   <span className={`w-3 h-3 rounded-full shrink-0 ${s.estado === "verde" ? "bg-green-500" : s.estado === "amarillo" ? "bg-amber-400" : s.estado === "rojo" ? "bg-red-500" : "bg-blue-400"}`} title={s.estado} />
                 </Link>
