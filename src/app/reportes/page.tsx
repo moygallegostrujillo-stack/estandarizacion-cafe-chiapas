@@ -44,7 +44,6 @@ export default function ReportesPage() {
         </div>
       </header>
       <main className="max-w-7xl mx-auto px-6 py-6">
-        <p className="text-sm text-zinc-400 mb-6">Generados automáticamente al cerrar turno (trigger) + respaldo cron 6am <code className="text-xs bg-zinc-800 px-1 rounded">/api/cron/reporte-diario</code></p>
         <div className="bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-zinc-800/50 text-zinc-400">
