@@ -88,7 +88,7 @@ export async function POST(req: Request) {
     });
     if (!ficha) throw new Error("Ficha no encontrada");
 
-    // JEFE_AREA y STAFF con área asignada solo pueden crear de su área
+    // Si es JEFE_AREA/STAFF con área asignada, solo puede crear de su área
     if (["JEFE_AREA", "STAFF"].includes(user.rol)) {
       try {
         const u = await prisma.usuario.findUnique({ where: { id: user.id }, select: { areaId: true } as never });
@@ -98,6 +98,13 @@ export async function POST(req: Request) {
         if (e instanceof Error && e.message.includes("Solo puedes crear")) throw e;
       }
     }
+
+    // Candado: misma ficha + misma sede + mismo turno + mismo día no puede repetirse (ej. 2× BAR-01 Matutino hoy)
+    const inicioDia = new Date(new Date().setHours(0, 0, 0, 0));
+    const yaExiste = await tx.checklist.findFirst({
+      where: { fichaId, sedeId: user.sedeId!, turnoId, fecha: { gte: inicioDia } },
+    });
+    if (yaExiste) throw new Error(`Ya existe el checklist de ${ficha.proceso.codigo} para este turno hoy`);
 
     const turno = await tx.turno.findFirst({ where: { id: turnoId, sedeId: user.sedeId! } });
     if (!turno) throw new Error("Turno no válido para esta sede");
