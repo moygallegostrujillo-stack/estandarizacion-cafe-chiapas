@@ -105,7 +105,7 @@ export async function POST(req: Request) {
     const yaExiste = await tx.checklist.findFirst({
       where: { fichaId, sedeId: user.sedeId!, turnoId, fechaDia },
     });
-    if (yaExiste) throw new Error(`Ya existe el checklist de ${ficha.proceso.codigo} para este turno hoy`);
+    if (yaExiste) throw new Error(`Ya creaste esta ficha, no puedes crearla nuevamente.`);
 
     const turno = await tx.turno.findFirst({ where: { id: turnoId, sedeId: user.sedeId! } });
     if (!turno) throw new Error("Turno no válido para esta sede");
@@ -150,7 +150,7 @@ export async function POST(req: Request) {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg.includes("Unique constraint") || msg.includes("unique") || msg.includes("P2002") || msg.includes("fechaDia")) {
-        throw new Error(`Ya existe el checklist de ${ficha.proceso.codigo} para este turno hoy`);
+        throw new Error(`Ya creaste esta ficha, no puedes crearla nuevamente.`);
       }
       throw e;
     }

@@ -110,13 +110,20 @@ export default function ChecklistsPage() {
     if (items.length > 7) return alert("Máximo 7 items");
     if (!puedeEditarDemo && items.length !== 7) return alert("STAFF debe usar 7 items de la ficha");
     setCreating(true);
+    setErrorMsg(null);
     const res = await fetch("/api/checklists", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ fichaId, turnoId, items }),
     });
     setCreating(false);
-    if (!res.ok) return alert((await res.json()).error || "Error");
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({ error: "Error" }));
+      const msg = d.error || "Error";
+      setErrorMsg(msg);
+      alert(msg);
+      return;
+    }
     const nuevo = await res.json();
     setChecklists((p) => [nuevo, ...p]);
     setFichaId("");
