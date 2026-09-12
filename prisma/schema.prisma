@@ -35,7 +35,6 @@ model Sede {
   config          ConfigSede?
   areas           Area[]
   usuarios        Usuario[]
-  fichaConfigs    FichaSedeConfig[]
 
   @@index([activo])
 }
@@ -68,14 +67,12 @@ model Usuario {
   passwordHash    String
   rol             String       @default("STAFF") // SUPER_ADMIN, GERENTE, JEFE_AREA, SUPERVISOR, STAFF, RRHH, COMPRAS
   sedeIdActiva    String?
-  areaId          String?
   activo          Boolean      @default(true)
   ultimoAcceso    DateTime?
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
   sede                    Sede?           @relation(fields: [sedeIdActiva], references: [id])
-  area                    Area?           @relation(fields: [areaId], references: [id])
   membresias              EquipoMiembro[]
   checklistsEjecutados    Checklist[]     @relation("ejecutor")
   checklistsVerificados   Checklist[]     @relation("verificador")
@@ -149,7 +146,6 @@ model Area {
   procesos    Proceso[]
   equipos     Equipo[]
   sede        Sede?      @relation(fields: [sedeId], references: [id], onDelete: Cascade)
-  jefes       Usuario[]
 
   @@unique([sedeId, codigo])
   @@index([sedeId])
@@ -205,7 +201,6 @@ model Ficha {
   kpis              FichaKpi[]
   riesgos           FichaRiesgo[]
   documentos        FichaDocumento[]
-  sedeConfigs       FichaSedeConfig[]
 
   @@index([procesoId])
   @@index([activo])
@@ -312,6 +307,7 @@ model Checklist {
   sedeId             String
   turnoId            String
   fecha              DateTime @default(now())
+  fechaDia           String   @default("") // YYYY-MM-DD America/Mexico_City para candado único
   estado             String   @default("PENDIENTE") // PENDIENTE, EN_PROGRESO, COMPLETADO, VERIFICADO, RECHAZADO
   ejecutadoPor       String
   supervisorId       String?
@@ -329,6 +325,7 @@ model Checklist {
   items              ChecklistItem[]
   incidencias        Incidencia[]
 
+  @@unique([fichaId, sedeId, turnoId, fechaDia])
   @@index([fichaId])
   @@index([sedeId])
   @@index([turnoId])
@@ -336,6 +333,7 @@ model Checklist {
   @@index([supervisorId])
   @@index([estado])
   @@index([fecha])
+  @@index([fechaDia])
 }
 
 model ChecklistItem {
@@ -464,20 +462,4 @@ model ReporteDiario {
 
   @@unique([sedeId, fecha])
   @@index([fecha])
-}
-
-model FichaSedeConfig {
-  id        String   @id @default(cuid())
-  fichaId   String
-  sedeId    String
-  activo    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  ficha     Ficha    @relation(fields: [fichaId], references: [id], onDelete: Cascade)
-  sede      Sede     @relation(fields: [sedeId], references: [id], onDelete: Cascade)
-
-  @@unique([fichaId, sedeId])
-  @@index([fichaId])
-  @@index([sedeId])
 }

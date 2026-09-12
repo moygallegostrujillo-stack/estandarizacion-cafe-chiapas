@@ -99,13 +99,11 @@ export async function POST(req: Request) {
       }
     }
 
-    // Candado: misma ficha + misma sede + mismo turno + mismo día (America/Mexico_City) no puede repetirse
-    const hoyMexico = new Date().toLocaleDateString("en-CA", { timeZone: "America/Mexico_City" });
-    const inicioDia = new Date(hoyMexico + "T06:00:00.000Z");
-    const inicioSiguiente = new Date(new Date(hoyMexico + "T00:00:00").getTime() + 24 * 60 * 60 * 1000);
-    const finDia = new Date(inicioSiguiente.toISOString().slice(0, 10) + "T05:59:59.999Z");
+    // Candado robusto: fechaDia (YYYY-MM-DD America/Mexico_City) + unique DB
+    const fechaDia = new Date().toLocaleDateString("en-CA", { timeZone: "America/Mexico_City" });
+    // App check (rápido)
     const yaExiste = await tx.checklist.findFirst({
-      where: { fichaId, sedeId: user.sedeId!, turnoId, fecha: { gte: inicioDia, lte: finDia } },
+      where: { fichaId, sedeId: user.sedeId!, turnoId, fechaDia },
     });
     if (yaExiste) throw new Error(`Ya existe el checklist de ${ficha.proceso.codigo} para este turno hoy`);
 
@@ -135,17 +133,27 @@ export async function POST(req: Request) {
       }
     }
 
-    const checklist = await tx.checklist.create({
-      data: {
-        fichaId,
-        sedeId: user.sedeId!,
-        turnoId,
-        ejecutadoPor: user.id,
-        estado: "PENDIENTE",
-        items: { create: itemsToCreate },
-      },
-      include: { items: true, ficha: { include: { proceso: true } }, turno: true },
-    });
+    let checklist;
+    try {
+      checklist = await tx.checklist.create({
+        data: {
+          fichaId,
+          sedeId: user.sedeId!,
+          turnoId,
+          fechaDia,
+          ejecutadoPor: user.id,
+          estado: "PENDIENTE",
+          items: { create: itemsToCreate },
+        } as never,
+        include: { items: true, ficha: { include: { proceso: true } }, turno: true },
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes("Unique constraint") || msg.includes("unique") || msg.includes("P2002") || msg.includes("fechaDia")) {
+        throw new Error(`Ya existe el checklist de ${ficha.proceso.codigo} para este turno hoy`);
+      }
+      throw e;
+    }
 
     // Audit log
     await tx.auditLog.create({
