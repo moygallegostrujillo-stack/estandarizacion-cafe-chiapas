@@ -90,6 +90,11 @@ export function puedeVerificar(rol: Role): boolean {
   return ["SUPER_ADMIN", "GERENTE", "JEFE_AREA", "SUPERVISOR"].includes(rol);
 }
 
+/** Verifica si el usuario puede aprobar/rechazar checklists (solo GERENTE o SUPER_ADMIN) */
+export function puedeAprobar(rol: Role): boolean {
+  return ["SUPER_ADMIN", "GERENTE"].includes(rol);
+}
+
 /** Verifica si el usuario puede editar fichas maestras */
 export function puedeEditarMaestro(rol: Role): boolean {
   return rol === "SUPER_ADMIN";

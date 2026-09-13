@@ -37,12 +37,6 @@ export async function listarUsuarios(rol: Role) {
     const { usuarios, sedes, areas } = await fetchAll();
     return { usuarios: usuarios.map(omitPasswordHash), sedes, areas };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    if (msg.includes("areaId") || msg.includes("area")) {
-      await prisma.$executeRawUnsafe(`ALTER TABLE "Usuario" ADD COLUMN IF NOT EXISTS "areaId" TEXT REFERENCES "Area"(id) ON DELETE SET NULL; CREATE INDEX IF NOT EXISTS "Usuario_areaId_idx" ON "Usuario"("areaId");`);
-      const { usuarios, sedes, areas } = await fetchAll();
-      return { usuarios: usuarios.map(omitPasswordHash), sedes, areas };
-    }
     throw e;
   }
 }
@@ -77,37 +71,18 @@ export async function crearUsuario(
   const passwordHash = await bcrypt.hash(data.password, 10);
 
   let created;
-  try {
-    created = await prisma.usuario.create({
-      data: {
-        email: data.email,
-        nombre: data.nombre,
-        apellido: data.apellido || null,
-        telefono: data.telefono || null,
-        rol: data.rol,
-        sedeIdActiva: data.sedeIdActiva || null,
-        areaId: areaId || null,
-        passwordHash,
-      } as never,
-    });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    if (msg.includes("areaId")) {
-      await prisma.$executeRawUnsafe(`ALTER TABLE "Usuario" ADD COLUMN IF NOT EXISTS "areaId" TEXT REFERENCES "Area"(id) ON DELETE SET NULL;`);
-      created = await prisma.usuario.create({
-        data: {
-          email: data.email,
-          nombre: data.nombre,
-          apellido: data.apellido || null,
-          telefono: data.telefono || null,
-          rol: data.rol,
-          sedeIdActiva: data.sedeIdActiva || null,
-          areaId: areaId || null,
-          passwordHash,
-        } as never,
-      });
-    } else throw e;
-  }
+  created = await prisma.usuario.create({
+    data: {
+      email: data.email,
+      nombre: data.nombre,
+      apellido: data.apellido || null,
+      telefono: data.telefono || null,
+      rol: data.rol,
+      sedeIdActiva: data.sedeIdActiva || null,
+      areaId: areaId || null,
+      passwordHash,
+    } as never,
+  });
 
   // Audit log (best effort)
   try {
@@ -186,15 +161,7 @@ export async function actualizarUsuario(
   }
 
   let updated;
-  try {
-    updated = await prisma.usuario.update({ where: { id }, data } as never);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    if (msg.includes("areaId")) {
-      await prisma.$executeRawUnsafe(`ALTER TABLE "Usuario" ADD COLUMN IF NOT EXISTS "areaId" TEXT REFERENCES "Area"(id) ON DELETE SET NULL;`);
-      updated = await prisma.usuario.update({ where: { id }, data } as never);
-    } else throw e;
-  }
+  updated = await prisma.usuario.update({ where: { id }, data } as never);
 
   // Audit log (best effort)
   try {

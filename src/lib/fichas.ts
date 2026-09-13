@@ -5,7 +5,7 @@
 // route.ts solo orquesta: auth → service → response.
 
 import { prisma } from "./prisma";
-import { withUserContext, type PrismaTransaction } from "./db-session";
+import { withUserContext } from "./db-session";
 import type { Role } from "./auth";
 import { tieneFiltroArea, puedeToggleFicha, puedeEditarMaestro } from "./permisos";
 
@@ -40,10 +40,8 @@ export async function listarFichas(
   // Obtener areaId si el usuario tiene filtro por área
   let areaIdFiltro: string | null = null;
   if (tieneFiltroArea(rol)) {
-    try {
-      const u = await prisma.usuario.findUnique({ where: { id: userId }, select: { areaId: true } as never });
-      areaIdFiltro = (u as unknown as { areaId: string | null })?.areaId || null;
-    } catch {}
+    const u = await prisma.usuario.findUnique({ where: { id: userId }, select: { areaId: true } });
+    areaIdFiltro = u?.areaId || null;
   }
 
   try {

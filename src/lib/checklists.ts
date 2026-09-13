@@ -26,10 +26,8 @@ export async function listarChecklists(
   // Filtro de área para JEFE_AREA/STAFF
   let areaIdFiltro: string | null = null;
   if (tieneFiltroArea(rol)) {
-    try {
-      const u = await prisma.usuario.findUnique({ where: { id: userId }, select: { areaId: true } as never });
-      areaIdFiltro = (u as unknown as { areaId: string | null })?.areaId || null;
-    } catch {}
+    const u = await prisma.usuario.findUnique({ where: { id: userId }, select: { areaId: true } });
+    areaIdFiltro = u?.areaId || null;
   }
 
   const where: Record<string, unknown> = {};
@@ -115,13 +113,9 @@ export async function crearChecklist(
 
     // Si es JEFE_AREA/STAFF con área asignada, solo puede crear de su área
     if (tieneFiltroArea(rol)) {
-      try {
-        const u = await prisma.usuario.findUnique({ where: { id: userId }, select: { areaId: true } as never });
-        const areaId = (u as unknown as { areaId: string | null })?.areaId;
-        if (areaId && ficha.proceso.areaId !== areaId) throw new Error("Solo puedes crear checklists de tu área asignada");
-      } catch (e) {
-        if (e instanceof Error && e.message.includes("Solo puedes crear")) throw e;
-      }
+      const u = await prisma.usuario.findUnique({ where: { id: userId }, select: { areaId: true } });
+      const areaId = u?.areaId;
+      if (areaId && ficha.proceso.areaId !== areaId) throw new Error("Solo puedes crear checklists de tu área asignada");
     }
 
     // Candado: fechaDia (YYYY-MM-DD America/Mexico_City) + unique DB
@@ -214,12 +208,19 @@ export async function actualizarChecklist(
     const isExecutor = checklist.ejecutadoPor === userId;
     const nextEstadoEarly = body.estado;
 
-    // Verificación (VERIFICADO/RECHAZADO) solo managers/supervisores
-    if (nextEstadoEarly === "VERIFICADO" || nextEstadoEarly === "RECHAZADO") {
+    // Flujo de 2 pasos:
+    // 1) JEFE_AREA/SUPERVISOR verifica → VERIFICADO (puede verificar su propio checklist)
+    // 2) GERENTE aprueba → APROBADO / rechaza → RECHAZADO (no puede aprobar el suyo)
+    if (nextEstadoEarly === "VERIFICADO") {
       if (!isManager) throw new Error("Solo SUPERVISOR o superior puede verificar");
-      if (isExecutor && rol !== "SUPER_ADMIN") throw new Error("No puedes verificar tu propio checklist — entra como supervisor@cafe.com");
       if (checklist.estado !== "COMPLETADO") throw new Error("Solo checklists COMPLETADO pueden verificarse");
+    } else if (nextEstadoEarly === "APROBADO" || nextEstadoEarly === "RECHAZADO") {
+      // APROBADO/RECHAZADO: solo GERENTE o SUPER_ADMIN, y no puede ser el ejecutor
+      if (!["GERENTE", "SUPER_ADMIN"].includes(rol)) throw new Error("Solo GERENTE o SUPER_ADMIN puede aprobar/rechazar");
+      if (isExecutor && rol !== "SUPER_ADMIN") throw new Error("No puedes aprobar tu propio checklist");
+      if (checklist.estado !== "VERIFICADO") throw new Error("Solo checklists VERIFICADO pueden aprobarse/rechazarse");
     } else {
+      // Edición normal solo ejecutor o manager
       if (!isExecutor && !isManager) {
         throw new Error("Solo el ejecutor o un manager puede editar");
       }
@@ -280,6 +281,10 @@ export async function actualizarChecklist(
       data.estado = nextEstado;
       if (nextEstado === "COMPLETADO") data.fechaEjecucion = new Date();
       if (nextEstado === "VERIFICADO") {
+        data.fechaVerificacion = new Date();
+        data.supervisorId = userId;
+      }
+      if (nextEstado === "APROBADO") {
         data.fechaVerificacion = new Date();
         data.supervisorId = userId;
       }
