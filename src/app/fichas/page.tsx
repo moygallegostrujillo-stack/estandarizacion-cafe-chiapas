@@ -18,7 +18,7 @@ export default async function FichasPage() {
           <div className="flex items-center gap-6">
             <Link href="/inicio" className="text-sm text-gray-600 hover:text-gray-900">← Dashboard</Link>
             <h1 className="text-lg font-bold text-gray-900">Fichas / Procesos</h1>
-            <span className="text-xs bg-gray-100 border px-2 py-1 rounded">54 procesos</span>
+            <span className="text-xs bg-gray-100 border px-2 py-1 rounded">Fichas</span>
           </div>
           <div className="flex items-center gap-3">
             <span className="text-sm text-gray-600">{user.nombre} · {user.rol}</span>
@@ -28,7 +28,7 @@ export default async function FichasPage() {
       </header>
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="mb-4">
-          <h2 className="text-xl font-semibold">54 fichas maestras</h2>
+          <h2 className="text-xl font-semibold">Fichas maestras</h2>
           <p className="text-sm text-gray-600">
             {canEditMaster
               ? "SUPER_ADMIN: edita las 7 preguntas, responsable y versiona. Jefe de área: desactiva fichas que no aplican en su sede."

@@ -93,7 +93,7 @@ export default function FichasClient({
     return acc;
   }, {} as Record<string, Ficha[]>);
 
-  if (loading) return <p className="text-sm text-gray-500 py-10 text-center">Cargando 54 fichas...</p>;
+  if (loading) return <p className="text-sm text-gray-500 py-10 text-center">Cargando fichas...</p>;
 
   return (
     <div className="space-y-4">

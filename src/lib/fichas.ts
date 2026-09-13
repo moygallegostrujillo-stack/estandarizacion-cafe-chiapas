@@ -63,10 +63,12 @@ export async function listarFichas(
       const activoEfectivo = f.activo && (cfg ? cfg.activo : true);
       return { ...f, activoEfectivo, sedeConfigs: undefined } as FichaListItem;
     });
-  } catch {
-    // Fallback si tabla FichaSedeConfig aún no existe
+  } catch (e) {
+    // Fallback: si FichaSedeConfig no existe aún, carga sin sedeConfigs
     const data = await withUserContext(userId, rol, sedeId, async (tx) => {
+      const whereArea = areaIdFiltro ? { proceso: { areaId: areaIdFiltro } } : {};
       return tx.ficha.findMany({
+        where: whereArea as never,
         include: {
           proceso: { include: { area: true } },
           preguntas: { orderBy: { numero: "asc" } },
