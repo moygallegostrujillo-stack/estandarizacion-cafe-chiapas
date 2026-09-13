@@ -32,37 +32,7 @@ async function main() {
   console.log("✓ Sedes:", sedes.map((s) => s.nombre).join(", "));
   const sede = sedes[0]!; // compatibilidad resto del seed
 
-  // Usuarios: admin + Julie/Erika/Fredy/Manolo + barra demo
-  const passwordHash = await bcrypt.hash("admin123", 12);
-  const admin = await prisma.usuario.upsert({
-    where: { email: "admin@cafe.com" },
-    update: {},
-    create: { email: "admin@cafe.com", nombre: "Administrador", apellido: "Sistema", passwordHash, rol: "SUPER_ADMIN", sedeIdActiva: sedes.find((s) => s.id === "sede-poliforum")!.id, activo: true },
-  });
-  console.log("✓ Usuario admin:", admin.email, `(${admin.rol})`);
-  const sedePoliforum = sedes.find((s) => s.id === "sede-poliforum")!;
-  const sedeCabeza = sedes.find((s) => s.id === "sede-cabeza-maya")!;
-  for (const u of [
-    { email: "julie@cafe.com", nombre: "Julie", rol: "GERENTE", sedeId: sedePoliforum.id, pass: "julie1234" },
-    { email: "erika@cafe.com", nombre: "Erika", rol: "GERENTE", sedeId: sedeCabeza.id, pass: "erika1234" },
-    { email: "fredy@cafe.com", nombre: "Fredy", rol: "SUPER_ADMIN", sedeId: sedePoliforum.id, pass: "fredy1234" },
-    { email: "manolo@cafe.com", nombre: "Manolo", rol: "SUPER_ADMIN", sedeId: sedePoliforum.id, pass: "manolo1234" },
-    { email: "barra@cafe.com", nombre: "Jefe Barra", rol: "JEFE_AREA", sedeId: sedePoliforum.id, pass: "barra1234" },
-  ]) {
-    const h = await bcrypt.hash(u.pass, 10);
-    await prisma.usuario.upsert({
-      where: { email: u.email },
-      update: {},
-      create: { email: u.email, nombre: u.nombre, passwordHash: h, rol: u.rol, sedeIdActiva: u.sedeId, activo: true },
-    });
-    console.log("✓ Usuario:", u.email, `(${u.rol} - ${u.sedeId})`);
-  }
-  // Asigna BAR a barra@cafe.com
-  try {
-    const bar = await prisma.area.findFirst({ where: { codigo: "BAR", sedeId: sedePoliforum.id } });
-    if (bar) await prisma.usuario.update({ where: { email: "barra@cafe.com" }, data: { areaId: bar.id } as never });
-  } catch {}
-
+  // ÁREAS primero (para poder asignar areaId a usuarios)
   const areas = [
     { c: "BAR", n: "Bar", i: "🍸", col: "#3B82F6", o: 1, procs: [
       { c: "BAR-01", n: "Apertura", p: "CRITICO", f: "DIARIO" },
@@ -189,6 +159,36 @@ async function main() {
   }
 
   console.log(`✅ Seed completo: ${sedes.length} sedes, 8 areas c/u, ${total} procesos`);
+
+  // USUARIOS después de áreas (para asignar areaId correctamente)
+  const passwordHash = await bcrypt.hash("admin123", 12);
+  const admin = await prisma.usuario.upsert({
+    where: { email: "admin@cafe.com" },
+    update: {},
+    create: { email: "admin@cafe.com", nombre: "Administrador", apellido: "Sistema", passwordHash, rol: "SUPER_ADMIN", sedeIdActiva: sedes.find((s) => s.id === "sede-poliforum")!.id, activo: true },
+  });
+  console.log("✓ Usuario admin:", admin.email, `(${admin.rol})`);
+  const sedePoliforum = sedes.find((s) => s.id === "sede-poliforum")!;
+  const sedeCabeza = sedes.find((s) => s.id === "sede-cabeza-maya")!;
+
+  // Asignar areaId a barra@cafe.com
+  const barArea = await prisma.area.findFirst({ where: { codigo: "BAR", sedeId: sedePoliforum.id } });
+
+  for (const u of [
+    { email: "julie@cafe.com", nombre: "Julie", rol: "GERENTE", sedeId: sedePoliforum.id, pass: "julie1234", areaId: null as string | null },
+    { email: "erika@cafe.com", nombre: "Erika", rol: "GERENTE", sedeId: sedeCabeza.id, pass: "erika1234", areaId: null as string | null },
+    { email: "fredy@cafe.com", nombre: "Fredy", rol: "SUPER_ADMIN", sedeId: sedePoliforum.id, pass: "fredy1234", areaId: null as string | null },
+    { email: "manolo@cafe.com", nombre: "Manolo", rol: "SUPER_ADMIN", sedeId: sedePoliforum.id, pass: "manolo1234", areaId: null as string | null },
+    { email: "barra@cafe.com", nombre: "Jefe Barra", rol: "JEFE_AREA", sedeId: sedePoliforum.id, pass: "barra1234", areaId: barArea?.id || null },
+  ]) {
+    const h = await bcrypt.hash(u.pass, 10);
+    await prisma.usuario.upsert({
+      where: { email: u.email },
+      update: { areaId: u.areaId } as never,
+      create: { email: u.email, nombre: u.nombre, passwordHash: h, rol: u.rol, sedeIdActiva: u.sedeId, areaId: u.areaId, activo: true } as never,
+    });
+    console.log("✓ Usuario:", u.email, `(${u.rol} - ${u.sedeId}${u.areaId ? ` - area: ${u.areaId}` : ""})`);
+  }
   console.log("");
   console.log("Para iniciar sesión:");
   console.log("  Email: admin@cafe.com");
