@@ -16,7 +16,7 @@
 import { prisma } from "./prisma";
 import type { Role } from "./auth";
 
-type PrismaTransaction = Omit<
+export type PrismaTransaction = Omit<
   typeof prisma,
   "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends"
 >;
