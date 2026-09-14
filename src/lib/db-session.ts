@@ -13,17 +13,18 @@
 //     return checklists;
 //   });
 
-import { prisma } from "./prisma";
+import { prisma, prismaAppUser } from "./prisma";
 import type { Role } from "./auth";
 
 export type PrismaTransaction = Omit<
-  typeof prisma,
+  typeof prismaAppUser,
   "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends"
 >;
 
 /**
- * Ejecuta una función dentro de una transacción Prisma con el contexto
+ * Ejecuta una función dentro de una transacción con el contexto
  * de usuario configurado para que RLS funcione correctamente.
+ * Usa el rol limitado app_user: RLS filtra por sede.
  */
 export async function withUserContext<T>(
   userId: string,
@@ -31,7 +32,7 @@ export async function withUserContext<T>(
   sedeId: string | null,
   fn: (tx: PrismaTransaction) => Promise<T>
 ): Promise<T> {
-  return prisma.$transaction(async (tx) => {
+  return prismaAppUser.$transaction(async (tx) => {
     // Establecer variables de sesión que leen las políticas RLS
     await tx.$executeRaw`SELECT set_config('app.user_id', ${userId}, true)`;
     await tx.$executeRaw`SELECT set_config('app.rol', ${rol}, true)`;
@@ -58,6 +59,7 @@ export async function withCurrentUserContext<T>(
 
 /**
  * Helper para SUPER_ADMIN: contexto sin filtro de sede.
+ * Usa la conexión admin (postgres): no la toca RLS.
  */
 export async function withAdminContext<T>(
   fn: (tx: PrismaTransaction) => Promise<T>
