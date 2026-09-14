@@ -1,11 +1,18 @@
 // ============================================================
 // src/lib/auth.ts — Configuración Auth.js v5 (unificado)
 // ============================================================
-import NextAuth from "next-auth";
+import NextAuth, { CredentialsSignin } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "./prisma";
 import bcrypt from "bcryptjs";
+import { estaBloqueado, registrarFallo, limpiarHistorial, obtenerIp } from "./rate-limit";
+
+// Error con código propio para que el login pueda decir:
+// "demasiados intentos, espera 15 min" (distinto de "credenciales inválidas").
+class CuentaBloqueada extends CredentialsSignin {
+  code = "cuenta_bloqueada";
+}
 
 export type Role =
   | "SUPER_ADMIN"
@@ -32,25 +39,43 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, request) {
         if (!credentials?.email || !credentials?.password) return null;
 
         const email = credentials.email as string;
         const password = credentials.password as string;
+        const ip = obtenerIp(request);
+
+        // Rate-limit: ¿ya superó los intentos permitidos?
+        if (await estaBloqueado(email, ip)) {
+          throw new CuentaBloqueada();
+        }
 
         const user = await prisma.usuario.findUnique({
           where: { email },
         });
 
-        if (!user || !user.activo) return null;
+        if (!user || !user.activo) {
+          // Registrar el fallo (también para emails inexistentes, así no se
+          // distingue por timing qué emails existen).
+          await registrarFallo(email, ip);
+          return null;
+        }
 
         const isValid = await bcrypt.compare(password, user.passwordHash);
-        if (!isValid) return null;
+        if (!isValid) {
+          await registrarFallo(email, ip);
+          return null;
+        }
 
-        await prisma.usuario.update({
-          where: { id: user.id },
-          data: { ultimoAcceso: new Date() },
-        });
+        // Login correcto: limpiar historial de fallos y actualizar acceso.
+        await Promise.all([
+          limpiarHistorial(email),
+          prisma.usuario.update({
+            where: { id: user.id },
+            data: { ultimoAcceso: new Date() },
+          }),
+        ]);
 
         return {
           id: user.id,

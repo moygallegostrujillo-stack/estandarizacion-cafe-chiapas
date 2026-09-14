@@ -23,7 +23,11 @@ export default function LoginPage() {
     });
 
     if (result?.error) {
-      setError("Credenciales invalidas");
+      if (result.code === "cuenta_bloqueada") {
+        setError("Demasiados intentos fallidos. Espera 15 minutos e intentalo de nuevo.");
+      } else {
+        setError("Credenciales invalidas");
+      }
       setLoading(false);
       return;
     }

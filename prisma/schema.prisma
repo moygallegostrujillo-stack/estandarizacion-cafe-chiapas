@@ -481,3 +481,18 @@ model FichaSedeConfig {
   @@index([fichaId])
   @@index([sedeId])
 }
+
+// ============================================================
+// RATE-LIMIT DE LOGIN — registra intentos fallidos (anti fuerza bruta)
+// Solo guarda fallos; se limpian al iniciar sesión o al vencer la ventana.
+// ============================================================
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  email     String
+  ip        String   @default("")
+  createdAt DateTime @default(now())
+
+  @@index([email, createdAt])
+  @@index([ip, createdAt])
+  @@index([createdAt])
+}
