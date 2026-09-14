@@ -897,7 +897,7 @@ BEGIN
   FROM "Checklist" c
   LEFT JOIN "Incidencia" i ON i."checklistId" = c.id
   WHERE c."sedeId" = p_sede_id
-    AND DATE(c.fecha) = p_fecha
+    AND ((c.fecha AT TIME ZONE 'UTC') AT TIME ZONE 'America/Mexico_City')::date = p_fecha
   ON CONFLICT ("sedeId", fecha)
   DO UPDATE SET
     "totalChecklists" = EXCLUDED."totalChecklists",
@@ -917,7 +917,7 @@ DECLARE
   v_pendientes INTEGER;
 BEGIN
   IF NEW.estado = 'VERIFICADO' AND (OLD IS NULL OR OLD.estado <> 'VERIFICADO') THEN
-    SELECT "turnoId", "sedeId", DATE(fecha)
+    SELECT "turnoId", "sedeId", ((fecha AT TIME ZONE 'UTC') AT TIME ZONE 'America/Mexico_City')::date
     INTO v_turno_id, v_sede_id, v_fecha
     FROM "Checklist" WHERE id = NEW.id;
 
@@ -925,7 +925,7 @@ BEGIN
     FROM "Checklist"
     WHERE "sedeId" = v_sede_id
       AND "turnoId" = v_turno_id
-      AND DATE(fecha) = v_fecha
+      AND ((fecha AT TIME ZONE 'UTC') AT TIME ZONE 'America/Mexico_City')::date = v_fecha
       AND estado NOT IN ('VERIFICADO', 'RECHAZADO');
 
     IF v_pendientes = 0 THEN

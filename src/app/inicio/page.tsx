@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import LogoutButton from "@/components/LogoutButton";
+import { hoyMexico, rangoDelDiaMexico } from "@/lib/fechas";
 
 // Cache 30s para que volver al home sea instantáneo
 export const revalidate = 30;
@@ -15,7 +16,7 @@ export default async function InicioPage() {
   if (!user) redirect("/login");
 
   // Conteos sin transacción RLS (filtramos manual por sedeId, 3x más rápido al volver)
-  const gteHoy = new Date(new Date().setHours(0, 0, 0, 0));
+  const { inicio: gteHoy } = rangoDelDiaMexico(hoyMexico());
   const [checklistsHoy, incidenciasAbiertas, fichasActivas] = user.sedeId
     ? await Promise.all([
         prisma.checklist.count({ where: { sedeId: user.sedeId, fecha: { gte: gteHoy } } }),

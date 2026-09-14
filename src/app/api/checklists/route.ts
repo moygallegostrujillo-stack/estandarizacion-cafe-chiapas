@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { withUserContext } from "@/lib/db-session";
 import { NextResponse } from "next/server";
+import { hoyMexico, rangoDelDiaMexico } from "@/lib/fechas";
 
 // GET /api/checklists?fecha=2026-08-24&estado=PENDIENTE
 export async function GET(req: Request) {
@@ -32,14 +33,14 @@ export async function GET(req: Request) {
   if (fichaId) where.fichaId = fichaId;
   if (turnoId) where.turnoId = turnoId;
   if (areaIdFiltro) where.ficha = { proceso: { areaId: areaIdFiltro } };
-  // Filtro fecha: hoy = solo hoy 00:00, o rango desde/hasta
+  // Filtro fecha en hora de México (no UTC del servidor)
   if (hoy === "1") {
-    const gte = new Date(new Date().setHours(0, 0, 0, 0));
-    where.fecha = { gte };
+    const { inicio } = rangoDelDiaMexico(hoyMexico());
+    where.fecha = { gte: inicio };
   } else if (desde || hasta) {
     const f: Record<string, Date> = {};
-    if (desde) f.gte = new Date(desde + "T00:00:00");
-    if (hasta) f.lte = new Date(hasta + "T23:59:59");
+    if (desde) f.gte = rangoDelDiaMexico(desde).inicio;
+    if (hasta) f.lte = rangoDelDiaMexico(hasta).fin;
     where.fecha = f;
   }
 
@@ -100,7 +101,7 @@ export async function POST(req: Request) {
     }
 
     // Candado robusto: fechaDia (YYYY-MM-DD America/Mexico_City) + unique DB
-    const fechaDia = new Date().toLocaleDateString("en-CA", { timeZone: "America/Mexico_City" });
+    const fechaDia = hoyMexico();
     // App check (rápido)
     const yaExiste = await tx.checklist.findFirst({
       where: { fichaId, sedeId: user.sedeId!, turnoId, fechaDia },

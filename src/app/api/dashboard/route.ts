@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { withUserContext } from "@/lib/db-session";
 import { NextResponse } from "next/server";
+import { hoyMexico, rangoDelDiaMexico } from "@/lib/fechas";
 
 export async function GET() {
   const session = await auth();
@@ -8,12 +9,11 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
   const data = await withUserContext(user.id, user.rol as never, user.sedeId, async (tx) => {
-    const hoy = new Date();
-    hoy.setHours(0, 0, 0, 0);
+    const { inicio: inicioHoy } = rangoDelDiaMexico(hoyMexico());
     const [checklistsHoy, completadosHoy, verificadosHoy, totalChecklists, incidenciasAbiertas, incidenciasCriticas, fichasActivas, ultimoReporte] = await Promise.all([
-      tx.checklist.count({ where: { fecha: { gte: hoy } } }),
-      tx.checklist.count({ where: { fecha: { gte: hoy }, estado: { in: ["COMPLETADO", "VERIFICADO"] } } }),
-      tx.checklist.count({ where: { fecha: { gte: hoy }, estado: "VERIFICADO" } }),
+      tx.checklist.count({ where: { fecha: { gte: inicioHoy } } }),
+      tx.checklist.count({ where: { fecha: { gte: inicioHoy }, estado: { in: ["COMPLETADO", "VERIFICADO"] } } }),
+      tx.checklist.count({ where: { fecha: { gte: inicioHoy }, estado: "VERIFICADO" } }),
       tx.checklist.count({}),
       tx.incidencia.count({ where: { cerrado: false } }),
       tx.incidencia.count({ where: { cerrado: false, gravedad: "CRITICA" } }),
