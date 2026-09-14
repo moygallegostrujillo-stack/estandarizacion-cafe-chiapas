@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { withAdminContext, type PrismaTransaction } from "@/lib/db-session";
 import bcrypt from "bcryptjs";
 import { createUsuarioSchema } from "@/lib/validators";
 import { z } from "zod";
@@ -24,26 +25,32 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   if (!isSuperAdmin(user.rol)) return NextResponse.json({ error: "Solo SUPER_ADMIN" }, { status: 403 });
 
-  async function fetchAll() {
+  async function fetchAll(tx: PrismaTransaction) {
     const [usuarios, sedes, areas] = await Promise.all([
-      prisma.usuario.findMany({
+      tx.usuario.findMany({
         orderBy: { createdAt: "desc" },
         include: { sede: { select: { id: true, nombre: true } }, area: { select: { id: true, nombre: true, codigo: true } } } as never,
       }),
-      prisma.sede.findMany({ select: { id: true, nombre: true, activo: true }, orderBy: { nombre: "asc" } }),
-      prisma.area.findMany({ where: { activo: true }, select: { id: true, nombre: true, codigo: true }, orderBy: { orden: "asc" } }),
+      tx.sede.findMany({ select: { id: true, nombre: true, activo: true }, orderBy: { nombre: "asc" } }),
+      tx.area.findMany({ where: { activo: true }, select: { id: true, nombre: true, codigo: true }, orderBy: { orden: "asc" } }),
     ]);
     return { usuarios, sedes, areas };
   }
 
   try {
-    const { usuarios, sedes, areas } = await fetchAll();
+    const { usuarios, sedes, areas } = await withAdminContext(async (tx) => {
+      const { usuarios, sedes, areas } = await fetchAll(tx);
+      return { usuarios, sedes, areas };
+    });
     return NextResponse.json({ usuarios: usuarios.map(omitPasswordHash), sedes, areas });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (msg.includes("areaId") || msg.includes("area")) {
       await prisma.$executeRawUnsafe(`ALTER TABLE "Usuario" ADD COLUMN IF NOT EXISTS "areaId" TEXT REFERENCES "Area"(id) ON DELETE SET NULL; CREATE INDEX IF NOT EXISTS "Usuario_areaId_idx" ON "Usuario"("areaId");`);
-      const { usuarios, sedes, areas } = await fetchAll();
+      const { usuarios, sedes, areas } = await withAdminContext(async (tx) => {
+        const { usuarios, sedes, areas } = await fetchAll(tx);
+        return { usuarios, sedes, areas };
+      });
       return NextResponse.json({ usuarios: usuarios.map(omitPasswordHash), sedes, areas });
     }
     throw e;
@@ -63,42 +70,27 @@ export async function POST(req: NextRequest) {
   }
   const data = parsed.data;
 
-  // Validar sede si se envía
-  if (data.sedeIdActiva) {
-    const sede = await prisma.sede.findUnique({ where: { id: data.sedeIdActiva } });
-    if (!sede) return NextResponse.json({ error: "Sede no encontrada" }, { status: 400 });
-  }
-  // Validar area si se envía (solo para JEFE_AREA)
-  const areaId = (body as Record<string, unknown>).areaId as string | undefined;
-  if (areaId) {
-    const area = await prisma.area.findUnique({ where: { id: areaId } });
-    if (!area) return NextResponse.json({ error: "Área no encontrada" }, { status: 400 });
-  }
-
-  const exists = await prisma.usuario.findUnique({ where: { email: data.email } });
-  if (exists) return NextResponse.json({ error: "Email ya registrado" }, { status: 409 });
-
-  const passwordHash = await bcrypt.hash(data.password, 10);
-
   let created;
   try {
-    created = await prisma.usuario.create({
-      data: {
-        email: data.email,
-        nombre: data.nombre,
-        apellido: data.apellido || null,
-        telefono: data.telefono || null,
-        rol: data.rol,
-        sedeIdActiva: data.sedeIdActiva || null,
-        areaId: areaId || null,
-        passwordHash,
-      } as never,
-    });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    if (msg.includes("areaId")) {
-      await prisma.$executeRawUnsafe(`ALTER TABLE "Usuario" ADD COLUMN IF NOT EXISTS "areaId" TEXT REFERENCES "Area"(id) ON DELETE SET NULL;`);
-      created = await prisma.usuario.create({
+    created = await withAdminContext(async (tx) => {
+      // Validar sede si se envía
+      if (data.sedeIdActiva) {
+        const sede = await tx.sede.findUnique({ where: { id: data.sedeIdActiva } });
+        if (!sede) throw new Error("Sede no encontrada");
+      }
+      // Validar area si se envía (solo para JEFE_AREA)
+      const areaId = (body as Record<string, unknown>).areaId as string | undefined;
+      if (areaId) {
+        const area = await tx.area.findUnique({ where: { id: areaId } });
+        if (!area) throw new Error("Área no encontrada");
+      }
+
+      const exists = await tx.usuario.findUnique({ where: { email: data.email } });
+      if (exists) throw new Error("__EMAIL_DUP__");
+
+      const passwordHash = await bcrypt.hash(data.password, 10);
+
+      return tx.usuario.create({
         data: {
           email: data.email,
           nombre: data.nombre,
@@ -109,6 +101,29 @@ export async function POST(req: NextRequest) {
           areaId: areaId || null,
           passwordHash,
         } as never,
+      });
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg === "__EMAIL_DUP__") return NextResponse.json({ error: "Email ya registrado" }, { status: 409 });
+    if (msg.includes("Sede no encontrada")) return NextResponse.json({ error: "Sede no encontrada" }, { status: 400 });
+    if (msg.includes("Área no encontrada")) return NextResponse.json({ error: "Área no encontrada" }, { status: 400 });
+    if (msg.includes("areaId")) {
+      await prisma.$executeRawUnsafe(`ALTER TABLE "Usuario" ADD COLUMN IF NOT EXISTS "areaId" TEXT REFERENCES "Area"(id) ON DELETE SET NULL;`);
+      created = await withAdminContext(async (tx) => {
+        const areaId = (body as Record<string, unknown>).areaId as string | undefined;
+        return tx.usuario.create({
+          data: {
+            email: data.email,
+            nombre: data.nombre,
+            apellido: data.apellido || null,
+            telefono: data.telefono || null,
+            rol: data.rol,
+            sedeIdActiva: data.sedeIdActiva || null,
+            areaId: areaId || null,
+            passwordHash: await bcrypt.hash(data.password, 10),
+          } as never,
+        });
       });
     } else throw e;
   }
@@ -156,28 +171,25 @@ export async function PATCH(req: NextRequest) {
   }
   const { id, password, ...rest } = parsed.data;
 
-  const target = await prisma.usuario.findUnique({ where: { id } });
-  if (!target) return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 });
+  // Pre-cargar target dentro de contexto admin
+  let prepared;
+  try {
+    prepared = await withAdminContext(async (tx) => {
+      const target = await tx.usuario.findUnique({ where: { id } });
+      if (!target) throw new Error("__USUARIO_NO_ENCONTRADO__");
+      return target;
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes("__USUARIO_NO_ENCONTRADO__")) {
+      return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 });
+    }
+    throw e;
+  }
 
   // Evitar que SUPER_ADMIN se desactive a sí mismo
   if (id === user.id && rest.activo === false) {
     return NextResponse.json({ error: "No puedes desactivar tu propio usuario" }, { status: 400 });
-  }
-
-  // Si cambia email, validar único
-  if (rest.email && rest.email !== target.email) {
-    const dup = await prisma.usuario.findUnique({ where: { email: rest.email } });
-    if (dup) return NextResponse.json({ error: "Email ya registrado" }, { status: 409 });
-  }
-
-  // Si cambia sede, validar existe
-  if (rest.sedeIdActiva) {
-    const sede = await prisma.sede.findUnique({ where: { id: rest.sedeIdActiva } });
-    if (!sede) return NextResponse.json({ error: "Sede no encontrada" }, { status: 400 });
-  }
-  if ((rest as Record<string, unknown>).areaId) {
-    const area = await prisma.area.findUnique({ where: { id: (rest as Record<string, unknown>).areaId as string } });
-    if (!area) return NextResponse.json({ error: "Área no encontrada" }, { status: 400 });
   }
 
   const data: Record<string, unknown> = {};
@@ -194,12 +206,35 @@ export async function PATCH(req: NextRequest) {
 
   let updated;
   try {
-    updated = await prisma.usuario.update({ where: { id }, data } as never);
+    updated = await withAdminContext(async (tx) => {
+      // Si cambia email, validar único
+      if (rest.email && rest.email !== prepared.email) {
+        const dup = await tx.usuario.findUnique({ where: { email: rest.email } });
+        if (dup) throw new Error("__EMAIL_DUP__");
+      }
+      // Si cambia sede, validar existe
+      if (rest.sedeIdActiva) {
+        const sede = await tx.sede.findUnique({ where: { id: rest.sedeIdActiva } });
+        if (!sede) throw new Error("Sede no encontrada");
+      }
+      if ((rest as Record<string, unknown>).areaId) {
+        const area = await tx.area.findUnique({ where: { id: (rest as Record<string, unknown>).areaId as string } });
+        if (!area) throw new Error("Área no encontrada");
+      }
+
+      return tx.usuario.update({ where: { id }, data } as never);
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    if (msg === "__USUARIO_NO_ENCONTRADO__") return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 });
+    if (msg === "__EMAIL_DUP__") return NextResponse.json({ error: "Email ya registrado" }, { status: 409 });
+    if (msg.includes("Sede no encontrada")) return NextResponse.json({ error: "Sede no encontrada" }, { status: 400 });
+    if (msg.includes("Área no encontrada")) return NextResponse.json({ error: "Área no encontrada" }, { status: 400 });
     if (msg.includes("areaId")) {
       await prisma.$executeRawUnsafe(`ALTER TABLE "Usuario" ADD COLUMN IF NOT EXISTS "areaId" TEXT REFERENCES "Area"(id) ON DELETE SET NULL;`);
-      updated = await prisma.usuario.update({ where: { id }, data } as never);
+      updated = await withAdminContext(async (tx) => {
+        return tx.usuario.update({ where: { id }, data } as never);
+      });
     } else throw e;
   }
 
@@ -210,7 +245,7 @@ export async function PATCH(req: NextRequest) {
         entityId: id,
         action: password ? "RESET_PASSWORD" : "UPDATE",
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        oldValue: { email: target.email, rol: target.rol, activo: target.activo } as any,
+        oldValue: { email: prepared.email, rol: prepared.rol, activo: prepared.activo } as any,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         newValue: data as any,
         userId: user.id,

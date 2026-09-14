@@ -2,7 +2,7 @@
 // src/app/inicio/page.tsx — Dashboard principal
 // ============================================================
 import { getCurrentUser } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { withUserContext } from "@/lib/db-session";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import LogoutButton from "@/components/LogoutButton";
@@ -15,71 +15,78 @@ export default async function InicioPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  // Conteos sin transacción RLS (filtramos manual por sedeId, 3x más rápido al volver)
+  // Conteos dentro de contexto RLS (sedeId = current_sede_id())
   const { inicio: gteHoy } = rangoDelDiaMexico(hoyMexico());
-  const [checklistsHoy, incidenciasAbiertas, fichasActivas] = user.sedeId
-    ? await Promise.all([
-        prisma.checklist.count({ where: { sedeId: user.sedeId, fecha: { gte: gteHoy } } }),
-        prisma.incidencia.count({ where: { cerrado: false, checklist: { sedeId: user.sedeId } } }),
-        prisma.ficha.count({ where: { activo: true } }),
-      ])
-    : await Promise.all([
-        prisma.checklist.count({ where: { fecha: { gte: gteHoy } } }),
-        prisma.incidencia.count({ where: { cerrado: false } }),
-        prisma.ficha.count({ where: { activo: true } }),
-      ]);
-  const data = { checklistsHoy, incidenciasAbiertas, fichasActivas };
+  const data = await withUserContext(user.id, user.rol, user.sedeId, async (tx) => {
+    const [checklistsHoy, incidenciasAbiertas, fichasActivas] = user.sedeId
+      ? await Promise.all([
+          tx.checklist.count({ where: { sedeId: user.sedeId, fecha: { gte: gteHoy } } }),
+          tx.incidencia.count({ where: { cerrado: false, checklist: { sedeId: user.sedeId } } }),
+          tx.ficha.count({ where: { activo: true } }),
+        ])
+      : await Promise.all([
+          tx.checklist.count({ where: { fecha: { gte: gteHoy } } }),
+          tx.incidencia.count({ where: { cerrado: false } }),
+          tx.ficha.count({ where: { activo: true } }),
+        ]);
+    return { checklistsHoy, incidenciasAbiertas, fichasActivas };
+  });
+  const { checklistsHoy, incidenciasAbiertas, fichasActivas } = data;
 
   // Semáforo: GERENTE ve por área de su sede, SUPER_ADMIN (Fredy/Manolo) ve por sucursal
   let semaforo: { id: string; codigo: string; nombre: string; icono: string | null; estado: "verde" | "amarillo" | "rojo" | "pendiente"; total: number; verificados: number; completadas?: number }[] = [];
   let semaforoTipo: "area" | "sede" = "area";
   if (user.rol === "GERENTE" && user.sedeId) {
-    const areas = await prisma.area.findMany({ where: { sedeId: user.sedeId, activo: true }, orderBy: { orden: "asc" } });
-    semaforo = await Promise.all(
-      areas.map(async (area) => {
-        const checks = await prisma.checklist.findMany({
-          where: { sedeId: user.sedeId!, fecha: { gte: gteHoy }, ficha: { proceso: { areaId: area.id } } },
-          include: { incidencias: true, items: { select: { valor: true } } },
-        });
-        const total = checks.length;
-        if (total === 0) return { id: area.id, codigo: area.codigo, nombre: area.nombre, icono: area.icono, estado: "rojo" as const, total, verificados: 0 };
-        const conIncidencia = checks.some((c) => c.incidencias.length > 0 || c.items.some((i) => i.valor === "NO_CUMPLE") || c.estado === "RECHAZADO");
-        if (conIncidencia) return { id: area.id, codigo: area.codigo, nombre: area.nombre, icono: area.icono, estado: "amarillo" as const, total, verificados: checks.filter((c) => c.estado === "VERIFICADO").length };
-        const todosVerificados = checks.every((c) => c.estado === "VERIFICADO");
-        if (todosVerificados) return { id: area.id, codigo: area.codigo, nombre: area.nombre, icono: area.icono, estado: "verde" as const, total, verificados: total };
-        return { id: area.id, codigo: area.codigo, nombre: area.nombre, icono: area.icono, estado: "pendiente" as const, total, verificados: checks.filter((c) => c.estado === "VERIFICADO").length };
-      })
-    );
+    semaforo = await withUserContext(user.id, user.rol, user.sedeId, async (tx) => {
+      const areas = await tx.area.findMany({ where: { sedeId: user.sedeId, activo: true }, orderBy: { orden: "asc" } });
+      return Promise.all(
+        areas.map(async (area) => {
+          const checks = await tx.checklist.findMany({
+            where: { sedeId: user.sedeId!, fecha: { gte: gteHoy }, ficha: { proceso: { areaId: area.id } } },
+            include: { incidencias: true, items: { select: { valor: true } } },
+          });
+          const total = checks.length;
+          if (total === 0) return { id: area.id, codigo: area.codigo, nombre: area.nombre, icono: area.icono, estado: "rojo" as const, total, verificados: 0 };
+          const conIncidencia = checks.some((c) => c.incidencias.length > 0 || c.items.some((i) => i.valor === "NO_CUMPLE") || c.estado === "RECHAZADO");
+          if (conIncidencia) return { id: area.id, codigo: area.codigo, nombre: area.nombre, icono: area.icono, estado: "amarillo" as const, total, verificados: checks.filter((c) => c.estado === "VERIFICADO").length };
+          const todosVerificados = checks.every((c) => c.estado === "VERIFICADO");
+          if (todosVerificados) return { id: area.id, codigo: area.codigo, nombre: area.nombre, icono: area.icono, estado: "verde" as const, total, verificados: total };
+          return { id: area.id, codigo: area.codigo, nombre: area.nombre, icono: area.icono, estado: "pendiente" as const, total, verificados: checks.filter((c) => c.estado === "VERIFICADO").length };
+        })
+      );
+    });
     semaforoTipo = "area";
   } else if (user.rol === "SUPER_ADMIN") {
-    const sedes = await prisma.sede.findMany({ where: { activo: true }, orderBy: { nombre: "asc" } });
-    semaforo = await Promise.all(
-      sedes.map(async (sede) => {
-        // Total esperadas = fichas activas de la sede (considera ocultas por sede)
-        const totalFichas = await prisma.ficha.count({
-          where: {
-            activo: true,
-            proceso: { area: { sedeId: sede.id, activo: true } },
-            // Excluye ocultas por sede (FichaSedeConfig activo=false)
-            sedeConfigs: { none: { sedeId: sede.id, activo: false } },
-          },
-        });
-        const checks = await prisma.checklist.findMany({
-          where: { sedeId: sede.id, fecha: { gte: gteHoy } },
-          include: { incidencias: true, items: { select: { valor: true } } },
-        });
-        const completadas = checks.filter((c) => c.estado === "COMPLETADO" || c.estado === "VERIFICADO").length;
-        const total = totalFichas;
-        const verificados = checks.filter((c) => c.estado === "VERIFICADO").length;
-        if (total === 0) return { id: sede.id, codigo: sede.nombre.split(" - ").pop() || sede.nombre, nombre: sede.nombre, icono: "🏢", estado: "rojo" as const, total, verificados, completadas };
-        if (completadas === 0) return { id: sede.id, codigo: sede.nombre.split(" - ").pop() || sede.nombre, nombre: sede.nombre, icono: "🏢", estado: "rojo" as const, total, verificados, completadas };
-        const conIncidencia = checks.some((c) => c.incidencias.length > 0 || c.items.some((i) => i.valor === "NO_CUMPLE") || c.estado === "RECHAZADO");
-        if (conIncidencia) return { id: sede.id, codigo: sede.nombre.split(" - ").pop() || sede.nombre, nombre: sede.nombre, icono: "🏢", estado: "amarillo" as const, total, verificados, completadas };
-        if (completadas === total && verificados === total) return { id: sede.id, codigo: sede.nombre.split(" - ").pop() || sede.nombre, nombre: sede.nombre, icono: "🏢", estado: "verde" as const, total, verificados, completadas };
-        if (verificados === completadas && completadas > 0) return { id: sede.id, codigo: sede.nombre.split(" - ").pop() || sede.nombre, nombre: sede.nombre, icono: "🏢", estado: "verde" as const, total, verificados, completadas };
-        return { id: sede.id, codigo: sede.nombre.split(" - ").pop() || sede.nombre, nombre: sede.nombre, icono: "🏢", estado: "pendiente" as const, total, verificados, completadas };
-      })
-    );
+    semaforo = await withUserContext(user.id, user.rol, user.sedeId, async (tx) => {
+      const sedes = await tx.sede.findMany({ where: { activo: true }, orderBy: { nombre: "asc" } });
+      return Promise.all(
+        sedes.map(async (sede) => {
+          // Total esperadas = fichas activas de la sede (considera ocultas por sede)
+          const totalFichas = await tx.ficha.count({
+            where: {
+              activo: true,
+              proceso: { area: { sedeId: sede.id, activo: true } },
+              // Excluye ocultas por sede (FichaSedeConfig activo=false)
+              sedeConfigs: { none: { sedeId: sede.id, activo: false } },
+            },
+          });
+          const checks = await tx.checklist.findMany({
+            where: { sedeId: sede.id, fecha: { gte: gteHoy } },
+            include: { incidencias: true, items: { select: { valor: true } } },
+          });
+          const completadas = checks.filter((c) => c.estado === "COMPLETADO" || c.estado === "VERIFICADO").length;
+          const total = totalFichas;
+          const verificados = checks.filter((c) => c.estado === "VERIFICADO").length;
+          if (total === 0) return { id: sede.id, codigo: sede.nombre.split(" - ").pop() || sede.nombre, nombre: sede.nombre, icono: "🏢", estado: "rojo" as const, total, verificados, completadas };
+          if (completadas === 0) return { id: sede.id, codigo: sede.nombre.split(" - ").pop() || sede.nombre, nombre: sede.nombre, icono: "🏢", estado: "rojo" as const, total, verificados, completadas };
+          const conIncidencia = checks.some((c) => c.incidencias.length > 0 || c.items.some((i) => i.valor === "NO_CUMPLE") || c.estado === "RECHAZADO");
+          if (conIncidencia) return { id: sede.id, codigo: sede.nombre.split(" - ").pop() || sede.nombre, nombre: sede.nombre, icono: "🏢", estado: "amarillo" as const, total, verificados, completadas };
+          if (completadas === total && verificados === total) return { id: sede.id, codigo: sede.nombre.split(" - ").pop() || sede.nombre, nombre: sede.nombre, icono: "🏢", estado: "verde" as const, total, verificados, completadas };
+          if (verificados === completadas && completadas > 0) return { id: sede.id, codigo: sede.nombre.split(" - ").pop() || sede.nombre, nombre: sede.nombre, icono: "🏢", estado: "verde" as const, total, verificados, completadas };
+          return { id: sede.id, codigo: sede.nombre.split(" - ").pop() || sede.nombre, nombre: sede.nombre, icono: "🏢", estado: "pendiente" as const, total, verificados, completadas };
+        })
+      );
+    });
     semaforoTipo = "sede";
   }
 

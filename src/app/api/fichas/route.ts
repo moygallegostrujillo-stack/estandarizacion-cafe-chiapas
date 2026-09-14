@@ -13,8 +13,10 @@ export async function GET() {
   let areaIdFiltro: string | null = null;
   if (["JEFE_AREA", "STAFF"].includes(user.rol)) {
     try {
-      const u = await prisma.usuario.findUnique({ where: { id: user.id }, select: { areaId: true } as never });
-      areaIdFiltro = (u as unknown as { areaId: string | null })?.areaId || null;
+      areaIdFiltro = await withUserContext(user.id, user.rol as never, user.sedeId, async (tx) => {
+        const u = await tx.usuario.findUnique({ where: { id: user.id }, select: { areaId: true } as never });
+        return (u as unknown as { areaId: string | null })?.areaId || null;
+      });
     } catch {}
   }
 
@@ -74,16 +76,23 @@ export async function PATCH(req: Request) {
       user.rol === "SUPER_ADMIN" || (["GERENTE", "JEFE_AREA"].includes(user.rol) && user.sedeId === sedeId);
     if (!canToggle) return NextResponse.json({ error: "No autorizado para esta sede" }, { status: 403 });
 
-    const sede = await prisma.sede.findUnique({ where: { id: sedeId } });
+    const sede = await withUserContext(user.id, user.rol as never, user.sedeId, async (tx) => {
+      return tx.sede.findUnique({ where: { id: sedeId } });
+    });
     if (!sede) return NextResponse.json({ error: "Sede no encontrada" }, { status: 400 });
 
     let cfg;
-    try {
-      cfg = await prisma.fichaSedeConfig.upsert({
-        where: { fichaId_sedeId: { fichaId: id, sedeId } },
-        update: { activo },
-        create: { fichaId: id, sedeId, activo },
+    const upsertCfg = () =>
+      withUserContext(user.id, user.rol as never, user.sedeId, async (tx) => {
+        return tx.fichaSedeConfig.upsert({
+          where: { fichaId_sedeId: { fichaId: id, sedeId } },
+          update: { activo },
+          create: { fichaId: id, sedeId, activo },
+        });
       });
+
+    try {
+      cfg = await upsertCfg();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg.includes("does not exist") || msg.includes("no existe") || msg.includes("FichaSedeConfig")) {
@@ -101,23 +110,21 @@ export async function PATCH(req: Request) {
           CREATE INDEX IF NOT EXISTS "FichaSedeConfig_fichaId_idx" ON "FichaSedeConfig"("fichaId");
           CREATE INDEX IF NOT EXISTS "FichaSedeConfig_sedeId_idx" ON "FichaSedeConfig"("sedeId");
         `);
-        cfg = await prisma.fichaSedeConfig.upsert({
-          where: { fichaId_sedeId: { fichaId: id, sedeId } },
-          update: { activo },
-          create: { fichaId: id, sedeId, activo },
-        });
+        cfg = await upsertCfg();
       } else throw e;
     }
 
     try {
-      await prisma.auditLog.create({
-        data: {
-          entityType: "Ficha",
-          entityId: id,
-          action: activo ? "ACTIVAR_SEDE" : "DESACTIVAR_SEDE",
-          newValue: { sedeId, activo } as never,
-          userId: user.id,
-        },
+      await withUserContext(user.id, user.rol as never, user.sedeId, async (tx) => {
+        await tx.auditLog.create({
+          data: {
+            entityType: "Ficha",
+            entityId: id,
+            action: activo ? "ACTIVAR_SEDE" : "DESACTIVAR_SEDE",
+            newValue: { sedeId, activo } as never,
+            userId: user.id,
+          },
+        });
       });
     } catch {}
 

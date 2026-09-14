@@ -1,4 +1,3 @@
-import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { withUserContext } from "@/lib/db-session";
 import { NextResponse } from "next/server";
@@ -19,32 +18,32 @@ export async function GET(req: Request) {
   const hasta = searchParams.get("hasta");
   const hoy = searchParams.get("hoy");
 
-  // JEFE_AREA y STAFF con área asignada solo ven su área
-  let areaIdFiltro: string | null = null;
-  if (["JEFE_AREA", "STAFF"].includes(user.rol)) {
-    try {
-      const u = await prisma.usuario.findUnique({ where: { id: user.id }, select: { areaId: true } as never });
-      areaIdFiltro = (u as unknown as { areaId: string | null })?.areaId || null;
-    } catch {}
-  }
-
-  const where: Record<string, unknown> = {};
-  if (estado) where.estado = estado;
-  if (fichaId) where.fichaId = fichaId;
-  if (turnoId) where.turnoId = turnoId;
-  if (areaIdFiltro) where.ficha = { proceso: { areaId: areaIdFiltro } };
-  // Filtro fecha en hora de México (no UTC del servidor)
-  if (hoy === "1") {
-    const { inicio } = rangoDelDiaMexico(hoyMexico());
-    where.fecha = { gte: inicio };
-  } else if (desde || hasta) {
-    const f: Record<string, Date> = {};
-    if (desde) f.gte = rangoDelDiaMexico(desde).inicio;
-    if (hasta) f.lte = rangoDelDiaMexico(hasta).fin;
-    where.fecha = f;
-  }
-
   const data = await withUserContext(user.id, user.rol as never, user.sedeId, async (tx) => {
+    // JEFE_AREA y STAFF con área asignada solo ven su área
+    let areaIdFiltro: string | null = null;
+    if (["JEFE_AREA", "STAFF"].includes(user.rol)) {
+      try {
+        const u = await tx.usuario.findUnique({ where: { id: user.id }, select: { areaId: true } as never });
+        areaIdFiltro = (u as unknown as { areaId: string | null })?.areaId || null;
+      } catch {}
+    }
+
+    const where: Record<string, unknown> = {};
+    if (estado) where.estado = estado;
+    if (fichaId) where.fichaId = fichaId;
+    if (turnoId) where.turnoId = turnoId;
+    if (areaIdFiltro) where.ficha = { proceso: { areaId: areaIdFiltro } };
+    // Filtro fecha en hora de México (no UTC del servidor)
+    if (hoy === "1") {
+      const { inicio } = rangoDelDiaMexico(hoyMexico());
+      where.fecha = { gte: inicio };
+    } else if (desde || hasta) {
+      const f: Record<string, Date> = {};
+      if (desde) f.gte = rangoDelDiaMexico(desde).inicio;
+      if (hasta) f.lte = rangoDelDiaMexico(hasta).fin;
+      where.fecha = f;
+    }
+
     return tx.checklist.findMany({
       where: where as never,
       include: {
@@ -92,7 +91,7 @@ export async function POST(req: Request) {
     // Si es JEFE_AREA/STAFF con área asignada, solo puede crear de su área
     if (["JEFE_AREA", "STAFF"].includes(user.rol)) {
       try {
-        const u = await prisma.usuario.findUnique({ where: { id: user.id }, select: { areaId: true } as never });
+        const u = await tx.usuario.findUnique({ where: { id: user.id }, select: { areaId: true } as never });
         const areaId = (u as unknown as { areaId: string | null })?.areaId;
         if (areaId && ficha.proceso.areaId !== areaId) throw new Error("Solo puedes crear checklists de tu área asignada");
       } catch (e) {
